@@ -60,8 +60,9 @@ int main (int argc, char *argv[])
 
   while(1){
     /* citirea mesajului */
-    printf ("[client]Introduceti un numar: ");
+    printf (">>");
     fflush (stdout);
+    bzero(request,BUFFERSIZE);
     read (0, request, BUFFERSIZE);
     request[strlen(request)-1]='\0'; // am scapat de \n
 
@@ -75,7 +76,7 @@ int main (int argc, char *argv[])
         perror ("[client]Eroare la write() spre server.\n");
         return errno;
       }
-
+    bzero(request,BUFFERSIZE);
     /* citirea raspunsului dat de server 
       (apel blocant pina cind serverul raspunde) */
     if (read (sd, &request,BUFFERSIZE) < 0)
@@ -90,7 +91,7 @@ int main (int argc, char *argv[])
       break;
     }
     /* afisam mesajul primit */
-    printf ("[client]Mesajul primit este: %s\n", request);
+    printf ("%s\n", request);
   } 
   /* inchidem conexiunea, am terminat */
   close (sd);
