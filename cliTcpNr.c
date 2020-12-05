@@ -12,7 +12,7 @@
 #include <stdlib.h>
 #include <netdb.h>
 #include <string.h>
-
+#include <sqlite3.h>
 /* codul de eroare returnat de anumite apeluri */
 extern int errno;
 #define BUFFERSIZE 4096

@@ -16,6 +16,7 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <pthread.h>
+#include <sqlite3.h>
 
 /* portul folosit */
 #define PORT 2909
@@ -35,11 +36,27 @@ typedef struct
 
 Thread *threadsPool; //un array de structuri Thread
 
+
+sqlite3 *db;
+sqlite3_stmt *sqlStatment;
+int dbConnection; 
 int sd;                                            //descriptorul de socket de ascultare
 int nthreads;                                      //numarul de threaduri
 pthread_mutex_t mlock = PTHREAD_MUTEX_INITIALIZER; // variabila mutex ce va fi partajata de threaduri
 
 void raspunde(int cl, int idThread);
+void prepareDBConnection(){
+   dbConnection = sqlite3_open(":memory:", &db);
+
+
+   if (dbConnection != SQLITE_OK) {
+        
+        fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
+        sqlite3_close(db);
+        
+        return 1;
+    }
+}
 
 int main(int argc, char *argv[])
 {
@@ -101,12 +118,18 @@ int main(int argc, char *argv[])
     threadCreate(i);
 
   sigaction(SIGPIPE, &(struct sigaction){SIG_IGN}, NULL);
+
+
+  prepareDBConnection();
+
   /* servim in mod concurent clientii...folosind thread-uri */
   for (;;)
   {
     printf("[server]Asteptam la portul %d...\n", PORT);
     pause();
   }
+
+  sqlite3_close(db);
 };
 
 void threadCreate(int i)
@@ -173,6 +196,24 @@ void handle_request(const int clientSocket, char *request, int idThread)
   }
   else if (!strcmp(request, "/register"))
   {
+    dbConnection = sqlite3_prepare_v2(db, "SELECT SQLITE_VERSION()", -1, &sqlStatment, 0);
+
+    if (dbConnection != SQLITE_OK) {
+        
+        fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
+        sqlite3_close(db);
+        
+        return 1;
+    }
+
+    dbConnection = sqlite3_step(sqlStatment);
+
+
+    if(dbConnection == SQLITE_ROW){
+      printf("%s\n", sqlite3_column_text(sqlStatment,0));
+    }
+
+    sqlite3_finalize(sqlStatment);
   }
   else if (!strcmp(request, "/login"))
   {
@@ -188,6 +229,8 @@ void handle_request(const int clientSocket, char *request, int idThread)
   }
   else if (!strcmp(request, "/quit"))
   {
+  }else{
+    strcat(response,"Comanda Inexistenta!");
   }
 
   printf("[Thread %d]Trimitem mesajul inapoi...%s\n", idThread, response);
@@ -207,10 +250,11 @@ void raspunde(int cl, int idThread)
   {
 
     checkForErrors(read(cl, &request, BUFFERSIZE), "[Thead] Eroare la read() de la client\n");
-
+    
     printf("[Thread %d]Mesajul a fost receptionat...%s\n", idThread, request);
     request[strlen(request)] = '\0';
 
+    if(request[0] == '\0' || request[0] =='\n') break;
     if (!strcmp(request, "/quit"))
     {
       checkForErrors(write(cl, &request, sizeof(request)), "[Thread]Eroare la write() quit catre client.\n");
@@ -219,7 +263,7 @@ void raspunde(int cl, int idThread)
     }
 
     handle_request(cl, request, idThread);
-    bzero(request,BUFFERSIZE);
+    bzero(request,BUFFERSIZE);  
   }
   printf("[Thread %d]Am incheiat conexiunea cu clientul.\n", idThread);
 }
