@@ -170,15 +170,16 @@ void raspunde(int cl,int idThread)
     checkForErrors(read (cl, &request,BUFFERSIZE), "[Thead] Eroare la read() de la client\n");
     
     printf ("[Thread %d]Mesajul a fost receptionat...%s\n",idThread, request);
-    request[strlen(request)-1]='\0';            
+    request[strlen(request)]='\0';            
 
     if(strcmp(request,"/quit") == 0)
     { 
       checkForErrors(write (cl, &request, sizeof(request)), "[Thread]Eroare la write() quit catre client.\n");
-      printf ("[Thread %d]Am incheiat conexiunea cu clientul.\n",idThread);  
+     
       break;
     }
 
     handle_request(cl,request, idThread);
   }
+  printf ("[Thread %d]Am incheiat conexiunea cu clientul.\n",idThread);  
 }

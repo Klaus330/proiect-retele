@@ -65,11 +65,7 @@ int main (int argc, char *argv[])
     read (0, request, BUFFERSIZE);
     request[strlen(request)-1]='\0'; // am scapat de \n
 
-    if(strcmp(request,"/quit") == 0)
-    { 
-      printf ("[client]Am incheiat conexiunea cu serverul.\n");  
-      break;
-    }
+   
     
     printf("[client] Am citit %s\n",request);
 
@@ -87,9 +83,15 @@ int main (int argc, char *argv[])
         perror ("[client]Eroare la read() de la server.\n");
         return errno;
       }
+    
+    if(strcmp(request,"/quit") == 0)
+    { 
+      printf ("[client] Am incheiat conexiunea cu serverul.\n");  
+      break;
+    }
     /* afisam mesajul primit */
     printf ("[client]Mesajul primit este: %s\n", request);
-  }
+  } 
   /* inchidem conexiunea, am terminat */
   close (sd);
 }
