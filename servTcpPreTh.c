@@ -248,7 +248,7 @@ int treatRow(void *NotUsed, int argc, char **argv,
     return 0; 
 }
 
-char* getTop(){
+void getTop(){
 
     char *sql = "SELECT id,title,nr_voturi FROM melodies ORDER BY nr_voturi DESC";
     bzero(response,BUFFERSIZE);
@@ -264,8 +264,6 @@ char* getTop(){
         
         return "500 Internal server error\n";
     } 
-
-    return response;
 }
 
 
@@ -350,7 +348,7 @@ void handle_request(const int clientSocket, char *request, int idThread)
   }
   else if (!strcmp(request, "/top"))
   {
-    strcat(response, getTop());
+    getTop();
   }
   else if (!strcmp(request, "/add"))
   {
