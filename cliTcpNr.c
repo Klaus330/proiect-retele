@@ -63,7 +63,7 @@ int main (int argc, char *argv[])
     printf (">>");
     fflush (stdout);
     bzero(request,BUFFERSIZE);
-    read (0, request, BUFFERSIZE);
+    read (0, request, BUFFERSIZE); // citeste de la tastatura
     request[strlen(request)-1]='\0'; // am scapat de \n
 
    
@@ -71,19 +71,19 @@ int main (int argc, char *argv[])
     printf("[client] Am citit %s\n",request);
 
     /* trimiterea mesajului la server */
-    if (write (sd,&request,BUFFERSIZE) <= 0)
-      {
-        perror ("[client]Eroare la write() spre server.\n");
-        return errno;
-      }
+    if (write (sd,&request,sizeof(request)) <= 0)
+    {
+      perror ("[client]Eroare la write() spre server.\n");
+      return errno;
+    }
     bzero(request,BUFFERSIZE);
     /* citirea raspunsului dat de server 
       (apel blocant pina cind serverul raspunde) */
-    if (read (sd, &request,BUFFERSIZE) < 0)
-      {
-        perror ("[client]Eroare la read() de la server.\n");
-        return errno;
-      }
+    if (read (sd, &request, sizeof(request)) < 0)
+    {
+      perror ("[client]Eroare la read() de la server.\n");
+      return errno;
+    }
     
     if(strcmp(request,"/quit") == 0)
     { 
@@ -92,6 +92,7 @@ int main (int argc, char *argv[])
     }
     /* afisam mesajul primit */
     printf ("%s\n", request);
+    bzero(request,BUFFERSIZE);
   } 
   /* inchidem conexiunea, am terminat */
   close (sd);
