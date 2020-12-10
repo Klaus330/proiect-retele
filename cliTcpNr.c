@@ -84,7 +84,7 @@ int main (int argc, char *argv[])
       perror ("[client]Eroare la read() de la server.\n");
       return errno;
     }
-    
+    if(strlen(request) == 0) break;
     if(strcmp(request,"/quit") == 0)
     { 
       printf ("[client] Am incheiat conexiunea cu serverul.\n");  

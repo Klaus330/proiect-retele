@@ -9,7 +9,7 @@
 #include <signal.h>
 #include <pthread.h>
 #include <sqlite3.h>
-
+#include <assert.h>
 /* portul folosit */
 #define PORT 2909
 #define BUFFERSIZE 4096
@@ -262,33 +262,39 @@ void getTop(){
         sqlite3_free(error_message);
         sqlite3_close(db);
         
-        return "500 Internal server error\n";
+        bzero(response,BUFFERSIZE);
+        strcat(response,"500 Internal server error\n");
     } 
 }
 
 
-char* getCategories(int clientSocket)
+void getCategories(int clientSocket)
 {
 
     char* category[255];
 
-
     checkForErrors(write(clientSocket, "Ce categorie te intereseaza?", 255), "[Thread]Eroare la write() catre client.\n");
 
     checkForErrors(read(clientSocket, &category, 256), "[Thead] Eroare la read() de la client\n");
+    printf("[server] Am citit categoria: %s\n",category);
 
-
-    char *sql = "SELECT id,title,nr_voturi FROM melodies WHERE category=? ORDER BY nr_voturi DESC";
+    char *sql = "SELECT m.id,m.title,m.nr_voturi FROM melodies m JOIN rmcat r ON r.id_melody=m.id JOIN categories c ON c.id=r.id_category WHERE c.name=? ORDER BY m.nr_voturi DESC";
     
   //  dbConnection = sqlite3_exec(db, sql, treatRow, 0, &error_message);
     dbConnection = sqlite3_prepare_v2(db, sql, -1, &sqlStatment, 0);
     
     if (dbConnection == SQLITE_OK) {
         
-        sqlite3_bind_text(sqlStatment, 1, category,-1,0);
+        sqlite3_bind_text16(sqlStatment, 1, category,-1,SQLITE_STATIC);
     } else {
         
         fprintf(stderr, "Failed to execute statement: %s\n", sqlite3_errmsg(db));
+        sqlite3_finalize(sqlStatment);
+        sqlite3_free(error_message);
+        sqlite3_close(db);
+        bzero(response,BUFFERSIZE);
+        strcat(response,"500 Internal server error\n");
+        return;
     }
 
     bzero(response,BUFFERSIZE);
@@ -298,20 +304,26 @@ char* getCategories(int clientSocket)
       ++i;
     }
     
+    printf("[server]: Rapunsul este:%s \n",response);
+
+    if(strlen(response) == 0){
+      strcat(response,"Nu exista melodii pentru aceasta categorie");
+    }
 
 
-    if (dbConnection != SQLITE_OK ) {
+
+    if (dbConnection != SQLITE_OK ) { 
         
         fprintf(stderr, "Failed to select data\n");
         fprintf(stderr, "SQL error: %s\n", error_message);
-
+        sqlite3_finalize(sqlStatment);
         sqlite3_free(error_message);
         sqlite3_close(db);
-        
-        return "500 Internal server error\n";
+        bzero(response,BUFFERSIZE);
+        strcat(response,"500 Internal server error\n");
+        return;
     } 
     sqlite3_finalize(sqlStatment);
-    return response;
 }
 
 void handle_request(const int clientSocket, char *request, int idThread)
@@ -344,7 +356,7 @@ void handle_request(const int clientSocket, char *request, int idThread)
   else if (!strcmp(request, "/category"))
   {
     //strcat(response,"Aici ai categoriile existente");//
-    strcat(response, getCategories(clientSocket));
+    getCategories(clientSocket);
   }
   else if (!strcmp(request, "/top"))
   {
