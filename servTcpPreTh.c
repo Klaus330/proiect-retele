@@ -38,10 +38,14 @@ int nthreads;                                      //numarul de threaduri
 pthread_mutex_t mlock = PTHREAD_MUTEX_INITIALIZER; // variabila mutex ce va fi partajata de threaduri
 
 struct user{
+  int userID;
   char *username;
   int isAdmin;
 }me; 
 
+int userIsLoggedIn(){
+  return strlen(me.username);
+}
 
 void raspunde(int cl, int idThread);
 void prepareDBConnection(){
@@ -107,7 +111,7 @@ char* registerUser(int clientSocket){
   //     printf("%s\n", sqlite3_column_text(sqlStatment,0));
   //   }
 
-  //   sqlite3_finalize(sqlStatment);
+  //   sqlite3_finalize(sqlStatment); 
 }
 
 int main(int argc, char *argv[])
@@ -279,8 +283,7 @@ void getCategories(int clientSocket)
     printf("[server] Am citit categoria: %s\n",category);
 
     char *sql = "SELECT m.id,m.title,m.nr_voturi FROM melodies m JOIN rmcat r ON r.id_melody=m.id JOIN categories c ON c.id=r.id_category WHERE c.name=? ORDER BY m.nr_voturi DESC";
-    
-  //  dbConnection = sqlite3_exec(db, sql, treatRow, 0, &error_message);
+
     dbConnection = sqlite3_prepare_v2(db, sql, -1, &sqlStatment, 0);
     
     if (dbConnection == SQLITE_OK) {
@@ -331,7 +334,7 @@ void handle_request(const int clientSocket, char *request, int idThread)
   bzero(response, BUFFERSIZE);
 
 
-  if (!strcmp(request, "/help"))
+  if (strstr(request, "/help"))
   {
     strcat(response, "\t Help Section\r\n");
     strcat(response, "<< /quit\tQuit app\r\n");
@@ -341,28 +344,28 @@ void handle_request(const int clientSocket, char *request, int idThread)
     strcat(response, "<< /register\tRegister an account\r\n");
     strcat(response, "<< /help\tShow help\r\n");
   }
-  else if (!strcmp(request, "/register"))
+  else if (strstr(request, "/register"))
   {
     strcat(response, registerUser(clientSocket));
   }
-  else if (!strcmp(request, "/login"))
+  else if (strstr(request, "/login"))
   {
     strcat(response,"Te-ai logat cu success");
   }
-  else if (!strcmp(request, "/vote"))
+  else if (strstr(request, "/vote"))
   {
     strcat(response,"Ai votat melodia");
   }
-  else if (!strcmp(request, "/category"))
+  else if (strstr(request, "/category"))
   {
     //strcat(response,"Aici ai categoriile existente");//
     getCategories(clientSocket);
   }
-  else if (!strcmp(request, "/top"))
+  else if (strstr(request, "/top"))
   {
     getTop();
   }
-  else if (!strcmp(request, "/add"))
+  else if (strstr(request, "/add"))
   {
     strcat(response,"Ai adaugat melodia");
   }else{
