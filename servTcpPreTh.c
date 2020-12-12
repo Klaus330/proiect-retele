@@ -291,14 +291,25 @@ void getTop()
   }
 }
 
-void getCategories(int clientSocket)
+void getCategories(char* request)
 {
 
-  char *category[255];
+  char category[255];
+  char *pointer;
+  pointer = strtok(request, " ");
+  pointer = strtok(NULL, " ,.-");
 
-  checkForErrors(write(clientSocket, "Ce categorie te intereseaza?", 255), "[Thread]Eroare la write() catre client.\n");
+  if (pointer != NULL)
+  {
+    strcpy(category, pointer);
+    pointer = strtok(NULL, " ,.-");
+  }
+  else
+  {
+    strcat(response,"Trebuie sa introduci o categorie\n /category [name]");
+    return;
+  }
 
-  checkForErrors(read(clientSocket, &category, 256), "[Thead] Eroare la read() de la client\n");
   printf("[server] Am citit categoria: %s\n", category);
 
   char *sql = "SELECT m.id,m.title,m.nr_voturi FROM melodies m JOIN rmcat r ON r.id_melody=m.id JOIN categories c ON c.id=r.id_category WHERE c.name=? ORDER BY m.nr_voturi DESC";
@@ -308,7 +319,7 @@ void getCategories(int clientSocket)
   if (dbConnection == SQLITE_OK)
   {
 
-    sqlite3_bind_text16(sqlStatment, 1, category, -1, SQLITE_STATIC);
+    sqlite3_bind_text16(sqlStatment, 0, category, -1, SQLITE_STATIC);
   }
   else
   {
@@ -323,18 +334,19 @@ void getCategories(int clientSocket)
   }
 
   bzero(response, BUFFERSIZE);
-  int i = 0;
+  dbConnection = sqlite3_step(dbConnection);
   while ((dbConnection = sqlite3_step(dbConnection)) == SQLITE_ROW)
   {
-    strcat(response, sqlite3_column_text(dbConnection, i));
-    ++i;
+    // strcat(response, sqlite3_column_text(dbConnection, i));
+    printf("%s\n",sqlite3_column_text(dbConnection, 0));
+    
   }
 
-  printf("[server]: Rapunsul este:%s \n", response);
+  // printf("[server]: Rapunsul este:%s \n", response);
 
   if (strlen(response) == 0)
   {
-    strcat(response, "Nu exista melodii pentru aceasta categorie");
+    strcpy(response, "Nu exista melodii pentru aceasta categorie");
   }
 
   if (dbConnection != SQLITE_OK)
@@ -351,6 +363,7 @@ void getCategories(int clientSocket)
   }
   sqlite3_finalize(sqlStatment);
 }
+
 void handle_request(const int clientSocket, char *request, int idThread, user *me)
 {
   bzero(response, BUFFERSIZE);
@@ -385,7 +398,11 @@ void handle_request(const int clientSocket, char *request, int idThread, user *m
   else if (strstr(request, "/category"))
   {
     //strcat(response,"Aici ai categoriile existente");//
-    getCategories(clientSocket);
+    if(strlen(me->username) != 0){
+      getCategories(request);
+    }else{
+      strcat(response,"Nu sunteti inregistrat");
+    }
   }
   else if (strstr(request, "/top"))
   {
@@ -397,7 +414,10 @@ void handle_request(const int clientSocket, char *request, int idThread, user *m
   }
   else if (strstr(request, "/whoami"))
   {
-    strcat(response, me->username);
+    if(me->username != NULL)
+      strcat(response, me->username);
+    
+    strcat(response, "Nu sunteti inregistrat");
   }
   else
   {
