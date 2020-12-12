@@ -31,87 +31,104 @@ Thread *threadsPool; //un array de structuri Thread
 char response[BUFFERSIZE];
 sqlite3 *db;
 sqlite3_stmt *sqlStatment;
-int dbConnection; 
+int dbConnection;
 char *error_message;
 int sd;                                            //descriptorul de socket de ascultare
 int nthreads;                                      //numarul de threaduri
 pthread_mutex_t mlock = PTHREAD_MUTEX_INITIALIZER; // variabila mutex ce va fi partajata de threaduri
 
-struct user{
+struct user
+{
   int userID;
   char *username;
   int isAdmin;
-}me; 
+} me;
 
-int userIsLoggedIn(){
+int userIsLoggedIn()
+{
   return strlen(me.username);
 }
 
 void raspunde(int cl, int idThread);
-void prepareDBConnection(){
-   dbConnection = sqlite3_open("rc.db", &db);
+void prepareDBConnection()
+{
+  dbConnection = sqlite3_open("rc.db", &db);
 
+  if (dbConnection != SQLITE_OK)
+  {
 
-   if (dbConnection != SQLITE_OK) {
-        
-        fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
-        sqlite3_close(db);
-        
-        return 1;
-    }
+    fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
+    sqlite3_close(db);
+
+    return 1;
+  }
 }
 
-
-char* registerUser(int clientSocket){
+char *registerUser(int clientSocket, char *request)
+{
 
   char username[257];
   char password[255];
   char response[BUFFERSIZE];
+  printf("[server] Request:%s\n", request);
 
-  bzero(response, BUFFERSIZE);
-  strcat(response, "Username");
-  printf("Scriu username\n");
-  checkForErrors(write(clientSocket, &response, sizeof(response)), "[Thread]Eroare la write() catre client.\n");
-  bzero(response, BUFFERSIZE);
-  printf("Citesc username\n");
-  checkForErrors(read(clientSocket, &username, 256), "[Thead] Eroare la read() de la client\n");
-    
-    // printf("[Thread %d]Mesajul a fost receptionat...%s\n", idThread, request);
-  username[strlen(username)] = '\0';
-  bzero(response, BUFFERSIZE);
-  printf("Username:%s\n", username);
+  char *pointer;
+  pointer = strtok(request, " ");
+  pointer = strtok(NULL, " ,.-");
 
-  bzero(response, BUFFERSIZE);
-  strcat(response, "Password:");  
-  checkForErrors(write(clientSocket, &response, sizeof(response)), "[Thread]Eroare la write() catre client.\n");
-  bzero(response, BUFFERSIZE);
+  if (pointer != NULL)
+  {
+    strcpy(username, pointer);
+    pointer = strtok(NULL, " ,.-");
+    printf("Username:%s\n",username);
+  }
+  else
+  {
+    return "Trebuie sa introduci un unsername\n ex: /reister [username] [passowrd]";
+  }
 
- while(strlen(password) == 0){
-  bzero(password, BUFFERSIZE);
-  checkForErrors(read(clientSocket, &password, 256), "[Thead] Eroare la read() de la client\n");
-  password[strlen(password)] = '\0';
- }  
-  printf("Password:%s\n",password);
+  if (pointer != NULL)
+  {
+    strcpy(password, pointer);
+    pointer = strtok(NULL, " ,.-");
+    printf("Passwrod:%s\n",password);
+  }
+  else
+  {
+    return "Trebuie sa introduci o parola\n ex: /reister [username] [passowrd]";
+  }
 
-  return "Register";
-  // dbConnection = sqlite3_prepare_v2(db, "INSERT INTO users(username,password,isAdmin) VALUES(?,?,?)", -1, &sqlStatment, 0);
+  char *sqlQuery = "INSERT INTO users(username,password,isAdmin) VALUES(?,?,?)";
+ 
+  dbConnection = sqlite3_prepare_v2(db, sqlQuery, -1, &sqlStatment, 0);
 
-  //   if (dbConnection != SQLITE_OK) {
-        
-  //       fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
-  //       sqlite3_close(db);
-        
-  //       return 1;
-  //   }
+  if (dbConnection != SQLITE_OK)
+  {
 
-  //   dbConnection = sqlite3_step(sqlStatment);
+    fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
+    sqlite3_close(db);
 
+    return "Internal server error";
+  }
 
-  //   if(dbConnection == SQLITE_ROW){
-  //     printf("%s\n", sqlite3_column_text(sqlStatment,0));
-  //   }
+  sqlite3_bind_text(sqlStatment, 1, username, -1, SQLITE_STATIC);
+  sqlite3_bind_text(sqlStatment, 2, password, -1, SQLITE_STATIC);
+  sqlite3_bind_int(sqlStatment, 3, 0);
 
-  //   sqlite3_finalize(sqlStatment); 
+  dbConnection = sqlite3_step(sqlStatment); 
+  if (dbConnection == SQLITE_DONE)
+  {
+    sqlite3_finalize(sqlStatment);
+  }
+  else
+  {
+    fprintf(stderr, "Failed to registering the user\n");
+    fprintf(stderr, "SQL error: %s\n", error_message);
+    sqlite3_free(error_message);
+    return "Internal Server Error";
+  }
+
+  return "You have been registerd, please log in.";
 }
 
 int main(int argc, char *argv[])
@@ -176,7 +193,7 @@ int main(int argc, char *argv[])
   sigaction(SIGPIPE, &(struct sigaction){SIG_IGN}, NULL);
 
   me.isAdmin = 0;
-  me.username = NULL; 
+  me.username = NULL;
   prepareDBConnection();
 
   /* servim in mod concurent clientii...folosind thread-uri */
@@ -232,107 +249,111 @@ void *treat(void *arg)
     /* am terminat cu acest client, inchidem conexiunea */
     close(client);
   }
-  sqlite3_close(db);  
+  sqlite3_close(db);
 }
 
+int treatRow(void *NotUsed, int argc, char **argv,
+             char **azColName)
+{
 
-int treatRow(void *NotUsed, int argc, char **argv, 
-                    char **azColName) {
-    
-    NotUsed = 0;
-    char *aux;
-    for (int i = 0; i < argc; i++) {    
-        strcat(response,argv[i]);
-        strcat(response," ");
-        
-    }
-    strcat(response,"\n");
-    printf("\n");
-    
-    return 0; 
+  NotUsed = 0;
+  char *aux;
+  for (int i = 0; i < argc; i++)
+  {
+    strcat(response, argv[i]);
+    strcat(response, " ");
+  }
+  strcat(response, "\n");
+  printf("\n");
+
+  return 0;
 }
 
-void getTop(){
+void getTop()
+{
 
-    char *sql = "SELECT id,title,nr_voturi FROM melodies ORDER BY nr_voturi DESC";
-    bzero(response,BUFFERSIZE);
-     dbConnection = sqlite3_exec(db, sql, treatRow, 0, &error_message);
+  char *sql = "SELECT id,title,nr_voturi FROM melodies ORDER BY nr_voturi DESC";
+  bzero(response, BUFFERSIZE);
+  dbConnection = sqlite3_exec(db, sql, treatRow, 0, &error_message);
 
-    if (dbConnection != SQLITE_OK ) {
-        
-        fprintf(stderr, "Failed to select data\n");
-        fprintf(stderr, "SQL error: %s\n", error_message);
+  if (dbConnection != SQLITE_OK)
+  {
 
-        sqlite3_free(error_message);
-        sqlite3_close(db);
-        
-        bzero(response,BUFFERSIZE);
-        strcat(response,"500 Internal server error\n");
-    } 
+    fprintf(stderr, "Failed to select data\n");
+    fprintf(stderr, "SQL error: %s\n", error_message);
+
+    sqlite3_free(error_message);
+    sqlite3_close(db);
+
+    bzero(response, BUFFERSIZE);
+    strcat(response, "500 Internal server error\n");
+  }
 }
-
 
 void getCategories(int clientSocket)
 {
 
-    char* category[255];
+  char *category[255];
 
-    checkForErrors(write(clientSocket, "Ce categorie te intereseaza?", 255), "[Thread]Eroare la write() catre client.\n");
+  checkForErrors(write(clientSocket, "Ce categorie te intereseaza?", 255), "[Thread]Eroare la write() catre client.\n");
 
-    checkForErrors(read(clientSocket, &category, 256), "[Thead] Eroare la read() de la client\n");
-    printf("[server] Am citit categoria: %s\n",category);
+  checkForErrors(read(clientSocket, &category, 256), "[Thead] Eroare la read() de la client\n");
+  printf("[server] Am citit categoria: %s\n", category);
 
-    char *sql = "SELECT m.id,m.title,m.nr_voturi FROM melodies m JOIN rmcat r ON r.id_melody=m.id JOIN categories c ON c.id=r.id_category WHERE c.name=? ORDER BY m.nr_voturi DESC";
+  char *sql = "SELECT m.id,m.title,m.nr_voturi FROM melodies m JOIN rmcat r ON r.id_melody=m.id JOIN categories c ON c.id=r.id_category WHERE c.name=? ORDER BY m.nr_voturi DESC";
 
-    dbConnection = sqlite3_prepare_v2(db, sql, -1, &sqlStatment, 0);
-    
-    if (dbConnection == SQLITE_OK) {
-        
-        sqlite3_bind_text16(sqlStatment, 1, category,-1,SQLITE_STATIC);
-    } else {
-        
-        fprintf(stderr, "Failed to execute statement: %s\n", sqlite3_errmsg(db));
-        sqlite3_finalize(sqlStatment);
-        sqlite3_free(error_message);
-        sqlite3_close(db);
-        bzero(response,BUFFERSIZE);
-        strcat(response,"500 Internal server error\n");
-        return;
-    }
+  dbConnection = sqlite3_prepare_v2(db, sql, -1, &sqlStatment, 0);
 
-    bzero(response,BUFFERSIZE);
-    int i = 0;
-    while(sqlite3_step(dbConnection) == SQLITE_ROW){
-      strcat(response,sqlite3_column_text(dbConnection, i));
-      ++i;
-    }
-    
-    printf("[server]: Rapunsul este:%s \n",response);
+  if (dbConnection == SQLITE_OK)
+  {
 
-    if(strlen(response) == 0){
-      strcat(response,"Nu exista melodii pentru aceasta categorie");
-    }
+    sqlite3_bind_text16(sqlStatment, 1, category, -1, SQLITE_STATIC);
+  }
+  else
+  {
 
-
-
-    if (dbConnection != SQLITE_OK ) { 
-        
-        fprintf(stderr, "Failed to select data\n");
-        fprintf(stderr, "SQL error: %s\n", error_message);
-        sqlite3_finalize(sqlStatment);
-        sqlite3_free(error_message);
-        sqlite3_close(db);
-        bzero(response,BUFFERSIZE);
-        strcat(response,"500 Internal server error\n");
-        return;
-    } 
+    fprintf(stderr, "Failed to execute statement: %s\n", sqlite3_errmsg(db));
     sqlite3_finalize(sqlStatment);
+    sqlite3_free(error_message);
+    sqlite3_close(db);
+    bzero(response, BUFFERSIZE);
+    strcat(response, "500 Internal server error\n");
+    return;
+  }
+
+  bzero(response, BUFFERSIZE);
+  int i = 0;
+  while ((dbConnection = sqlite3_step(dbConnection)) == SQLITE_ROW)
+  {
+    strcat(response, sqlite3_column_text(dbConnection, i));
+    ++i;
+  }
+
+  printf("[server]: Rapunsul este:%s \n", response);
+
+  if (strlen(response) == 0)
+  {
+    strcat(response, "Nu exista melodii pentru aceasta categorie");
+  }
+
+  if (dbConnection != SQLITE_OK)
+  {
+
+    fprintf(stderr, "Failed to select data\n");
+    fprintf(stderr, "SQL error: %s\n", error_message);
+    sqlite3_finalize(sqlStatment);
+    sqlite3_free(error_message);
+    sqlite3_close(db);
+    bzero(response, BUFFERSIZE);
+    strcat(response, "500 Internal server error\n");
+    return;
+  }
+  sqlite3_finalize(sqlStatment);
 }
 
 void handle_request(const int clientSocket, char *request, int idThread)
 {
   bzero(response, BUFFERSIZE);
-
 
   if (strstr(request, "/help"))
   {
@@ -346,15 +367,15 @@ void handle_request(const int clientSocket, char *request, int idThread)
   }
   else if (strstr(request, "/register"))
   {
-    strcat(response, registerUser(clientSocket));
+    strcat(response, registerUser(clientSocket, request));
   }
   else if (strstr(request, "/login"))
   {
-    strcat(response,"Te-ai logat cu success");
+    strcat(response, "Te-ai logat cu success");
   }
   else if (strstr(request, "/vote"))
   {
-    strcat(response,"Ai votat melodia");
+    strcat(response, "Ai votat melodia");
   }
   else if (strstr(request, "/category"))
   {
@@ -367,9 +388,11 @@ void handle_request(const int clientSocket, char *request, int idThread)
   }
   else if (strstr(request, "/add"))
   {
-    strcat(response,"Ai adaugat melodia");
-  }else{
-    strcat(response,"Comanda Inexistenta!");
+    strcat(response, "Ai adaugat melodia");
+  }
+  else
+  {
+    strcat(response, "Comanda Inexistenta!");
   }
 
   printf("[Thread %d]Trimitem mesajul inapoi...%s\n", idThread, response);
@@ -389,11 +412,11 @@ void raspunde(int cl, int idThread)
   {
 
     checkForErrors(read(cl, &request, BUFFERSIZE), "[Thead] Eroare la read() de la client\n");
-    
-   
+
     request[strlen(request)] = '\0';
     printf("[Thread %d]Mesajul a fost receptionat...%s\n", idThread, request);
-    if(strlen(request) == 0) break;
+    if (strlen(request) == 0)
+      break;
     if (!strcmp(request, "/quit"))
     {
       checkForErrors(write(cl, &request, sizeof(request)), "[Thread]Eroare la write() quit catre client.\n");
@@ -402,7 +425,7 @@ void raspunde(int cl, int idThread)
     }
 
     handle_request(cl, request, idThread);
-    bzero(request,BUFFERSIZE);  
+    bzero(request, BUFFERSIZE);
   }
   printf("[Thread %d]Am incheiat conexiunea cu clientul.\n", idThread);
 }
