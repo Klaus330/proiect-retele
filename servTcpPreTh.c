@@ -282,7 +282,7 @@ void handle_request(const int clientSocket, char *request, int idThread, user *m
   else if (strstr(request, "/add"))
   {	  
     if(me->username != NULL){
-    strcat(response, "Ai adaugat melodia");	
+      addMelody(request);
     }else{
       strcat(response,"Nu sunteti inregistrat\n");
     }
@@ -565,19 +565,18 @@ void getTop()
   }
 }
 
-
 void addMelody(char *request){
   char melody[255];
-  char category[255];
+  int categoryId;
   char yt_link[255];
   char *pointer;
   pointer = strtok(request, " ");
-  pointer = strtok(NULL, " ,.-");
+  pointer = strtok(NULL, " ");
 
   if (pointer != NULL)
   {
     strcpy(melody, pointer);
-    pointer = strtok(NULL, " ,.-");
+    pointer = strtok(NULL, " ");
   }
   else
   {
@@ -588,7 +587,7 @@ void addMelody(char *request){
   if (pointer != NULL)
   {
     strcpy(yt_link, pointer);
-    pointer = strtok(NULL, " ,.-");
+    pointer = strtok(NULL, " ");
   }
   else
   {
@@ -597,9 +596,9 @@ void addMelody(char *request){
   }
 
   if (pointer != NULL)
-  {
-    strcpy(category, pointer);
-    pointer = strtok(NULL, " ,.-");
+  {    
+    categoryId = atoi(pointer);
+    pointer = strtok(NULL, " ");
   }
   else
   {
@@ -607,7 +606,7 @@ void addMelody(char *request){
     return;
   }
 
-  char *sqlQuery = "INSERT INTO melodies VALUES(?,?)";
+  char *sqlQuery = "INSERT INTO melodies(title,yt_link) VALUES(?,?)";
 
   dbConnection = sqlite3_prepare_v2(db, sqlQuery, -1, &sqlStatment, 0);
 
@@ -616,8 +615,8 @@ void addMelody(char *request){
 
     fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
     sqlite3_close(db);
-
-    return "Internal server error";
+  strcat(response,"Internal server error");
+    return;
   }
 
   sqlite3_bind_text(sqlStatment, 1, melody, -1, SQLITE_STATIC);
@@ -633,8 +632,64 @@ void addMelody(char *request){
     fprintf(stderr, "Failed to registering the user\n");
     fprintf(stderr, "SQL error: %s\n", error_message);
     sqlite3_free(error_message);
-    return "Internal Server Error";
+    strcat(response,"Internal server error");
+    return;
   }
 
-  return "You have been registerd, please log in.";
+  int melodyId=0;
+  char *sql = "SELECT id FROM melodies ORDER BY id DESC LIMIT 1";
+  bzero(response, BUFFERSIZE);
+  dbConnection = sqlite3_prepare_v2(db, sql, -1, &sqlStatment, 0);
+  
+  dbConnection = sqlite3_step(sqlStatment); 
+  if (dbConnection == SQLITE_ROW)
+  {
+    melodyId = sqlite3_column_int(sqlStatment,0);
+    printf("melodyID:%d\n",melodyId);
+    printf("AM trecut si pe aici\n");
+  }else
+  {
+    fprintf(stderr, "Failed to select data\n");
+    fprintf(stderr, "SQL error: %s\n", error_message);
+
+    sqlite3_free(error_message);
+    // sqlite3_close(db);
+    sqlite3_finalize(sqlStatment);
+    bzero(response, BUFFERSIZE);
+    strcat(response,"Internal server error");
+    return;
+  }
+
+  
+  char *sqlQ = "INSERT INTO rmcat VALUES(?,?)";
+
+  dbConnection = sqlite3_prepare_v2(db, sqlQ, -1, &sqlStatment, 0);
+
+  if (dbConnection != SQLITE_OK)
+  {
+
+    fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
+    sqlite3_close(db);
+    strcat(response,"Internal server error");
+    return;
+  }
+  sqlite3_bind_int(sqlStatment, 1, melodyId);
+  sqlite3_bind_int(sqlStatment, 2, categoryId);
+  
+
+  dbConnection = sqlite3_step(sqlStatment); 
+  if (dbConnection == SQLITE_DONE)
+  {
+    sqlite3_finalize(sqlStatment);
+  }
+  else
+  {
+    fprintf(stderr, "Failed to registering the user\n");
+    fprintf(stderr, "SQL error: %s\n", error_message);
+    sqlite3_free(error_message);
+    strcat(response,"Internal server error");
+    return;
+  }
+
+  strcat(response,"You've added a new melody");
 }
