@@ -54,7 +54,7 @@ void getTop();
 void getCategories(int clientSocket);
 void handle_request(const int clientSocket, char *request, int idThread, user *me);
 void addMelody(char *request);
-
+void vote(char *request,user *me);
 
 void prepareDBConnection()
 {
@@ -258,7 +258,7 @@ void handle_request(const int clientSocket, char *request, int idThread, user *m
   else if (strstr(request, "/vote"))
   {
     if(me->username != NULL){
-     strcat(response, "Ai votat melodia");
+     vote(request,me);
     }else{
       strcat(response,"Nu sunteti inregistrat\n");
     }
@@ -692,4 +692,115 @@ void addMelody(char *request){
   }
 
   strcat(response,"You've added a new melody");
+}
+
+
+void vote(char *request, user *me){
+  int melodyId;
+
+  char *pointer;
+  pointer = strtok(request, " ");
+  pointer = strtok(NULL, " ");
+
+  if (pointer != NULL)
+  {
+    melodyId = atoi(pointer);
+    pointer = strtok(NULL, " ");
+  }
+  else
+  {
+    strcat(response,"Invalid format. Ex: /vote [melodyId]");
+    return;
+  }
+
+
+  char *sqlQuery = "SELECT COUNT(*) FROM melodies WHERE id=?";
+
+  dbConnection = sqlite3_prepare_v2(db, sqlQuery, -1, &sqlStatment, 0);
+
+  if (dbConnection != SQLITE_OK)
+  {
+
+    fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
+    sqlite3_close(db);
+    strcat(response,"Internal server error");
+    return;
+  }
+  sqlite3_bind_int(sqlStatment, 1, melodyId);
+  
+
+  dbConnection = sqlite3_step(sqlStatment); 
+  if (dbConnection != SQLITE_DONE)
+  {
+    sqlite3_finalize(sqlStatment);
+  }
+  else
+  {
+    strcat(response,"Nu Poti vota o melodie de mai multe ori");
+    return;
+  }
+
+  char *sqlQ = "UPDATE melodies SET nr_voturi=nr_voturi+1 WHERE id=?";
+
+  dbConnection = sqlite3_prepare_v2(db, sqlQ, -1, &sqlStatment, 0);
+
+  if (dbConnection != SQLITE_OK)
+  {
+
+    fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
+    sqlite3_close(db);
+    strcat(response,"Internal server error");
+    return;
+  }
+  sqlite3_bind_int(sqlStatment, 1, melodyId);
+  
+
+  dbConnection = sqlite3_step(sqlStatment); 
+  if (dbConnection == SQLITE_DONE)
+  {
+    sqlite3_finalize(sqlStatment);
+  }
+  else
+  {
+    fprintf(stderr, "Failed to registering the user\n");
+    fprintf(stderr, "SQL error: %s\n", error_message);
+    sqlite3_free(error_message);
+    strcat(response,"Internal server error");
+    return;
+  }
+
+
+
+
+  char *sql = "INSERT INTO votes VALUES(?,?)";
+
+  dbConnection = sqlite3_prepare_v2(db, sql, -1, &sqlStatment, 0);
+
+  if (dbConnection != SQLITE_OK)
+  {
+
+    fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
+    sqlite3_close(db);
+    strcat(response,"Internal server error");
+    return;
+  }
+  sqlite3_bind_int(sqlStatment, 1, melodyId);
+  sqlite3_bind_int(sqlStatment, 2, me->userID);
+  
+
+  dbConnection = sqlite3_step(sqlStatment); 
+  if (dbConnection == SQLITE_DONE)
+  {
+    sqlite3_finalize(sqlStatment);
+  }
+  else
+  {
+    fprintf(stderr, "Failed to registering the user\n");
+    fprintf(stderr, "SQL error: %s\n", error_message);
+    sqlite3_free(error_message);
+    strcat(response,"Internal server error");
+    return;
+  }
+  
+  strcat(response,"Votul tau a fost inregistrat");
 }
