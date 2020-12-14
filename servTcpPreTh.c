@@ -291,6 +291,80 @@ void getTop()
   }
 }
 
+
+void addMelody(char *request){
+  char melody[255];
+  char category[255];
+  char yt_link[255];
+  char *pointer;
+  pointer = strtok(request, " ");
+  pointer = strtok(NULL, " ,.-");
+
+  if (pointer != NULL)
+  {
+    strcpy(melody, pointer);
+    pointer = strtok(NULL, " ,.-");
+  }
+  else
+  {
+    strcat(response,"Invalid format. Ex: /add [title] [yt_link] [categoryID]");
+    return;
+  }
+
+  if (pointer != NULL)
+  {
+    strcpy(yt_link, pointer);
+    pointer = strtok(NULL, " ,.-");
+  }
+  else
+  {
+    strcat(response,"Invalid format. Ex: /add [title] [yt_link] [categoryID]");
+    return;
+  }
+
+  if (pointer != NULL)
+  {
+    strcpy(category, pointer);
+    pointer = strtok(NULL, " ,.-");
+  }
+  else
+  {
+    strcat(response,"Invalid format. Ex: /add [title] [yt_link] [categoryID]");
+    return;
+  }
+
+  char *sqlQuery = "INSERT INTO melodies VALUES(?,?)";
+
+  dbConnection = sqlite3_prepare_v2(db, sqlQuery, -1, &sqlStatment, 0);
+
+  if (dbConnection != SQLITE_OK)
+  {
+
+    fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
+    sqlite3_close(db);
+
+    return "Internal server error";
+  }
+
+  sqlite3_bind_text(sqlStatment, 1, melody, -1, SQLITE_STATIC);
+  sqlite3_bind_text(sqlStatment, 2, yt_link, -1, SQLITE_STATIC);
+
+  dbConnection = sqlite3_step(sqlStatment); 
+  if (dbConnection == SQLITE_DONE)
+  {
+    sqlite3_finalize(sqlStatment);
+  }
+  else
+  {
+    fprintf(stderr, "Failed to registering the user\n");
+    fprintf(stderr, "SQL error: %s\n", error_message);
+    sqlite3_free(error_message);
+    return "Internal Server Error";
+  }
+
+  return "You have been registerd, please log in.";
+}
+
 void getCategories(char* request)
 {
 
@@ -388,20 +462,27 @@ void handle_request(const int clientSocket, char *request, int idThread, user *m
   }
   else if (strstr(request, "/login"))
   {
-    strcat(response, login(request, me));
-    
+    if(me->username != NULL){
+      strcat(response,"Sunteti deja inregistrat\n");
+    }else{
+      strcat(response, login(request, me));
+    }
   }
   else if (strstr(request, "/vote"))
   {
-    strcat(response, "Ai votat melodia");
+    if(me->username != NULL){
+     strcat(response, "Ai votat melodia");
+    }else{
+      strcat(response,"Nu sunteti inregistrat\n");
+    }
   }
   else if (strstr(request, "/category"))
   {
     //strcat(response,"Aici ai categoriile existente");//
-    if(strlen(me->username) != 0){
+    if(me->username != NULL){
       getCategories(request);
     }else{
-      strcat(response,"Nu sunteti inregistrat");
+      strcat(response,"Nu sunteti inregistrat\n");
     }
   }
   else if (strstr(request, "/top"))
@@ -410,7 +491,19 @@ void handle_request(const int clientSocket, char *request, int idThread, user *m
   }
   else if (strstr(request, "/add"))
   {
+    if(me->username != NULL){
     strcat(response, "Ai adaugat melodia");
+    }else{
+      strcat(response,"Nu sunteti inregistrat\n");
+    }
+  }
+  else if (strstr(request, "/remove"))
+  {
+    if(me->username != NULL){
+      strcat(response, "Ai sters melodia");
+    }else{
+      strcat(response,"Nu sunteti inregistrat\n");
+    }
   }
   else if (strstr(request, "/whoami"))
   {
