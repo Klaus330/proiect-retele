@@ -55,6 +55,8 @@ void getCategories(char *request);
 void handle_request(const int clientSocket, char *request, int idThread, user *me);
 void addMelody(char *request);
 void vote(char *request,user *me);
+void postComment(char *request, user *me);
+void getComments(char *request);
 
 void prepareDBConnection()
 {
@@ -228,11 +230,18 @@ void handle_request(const int clientSocket, char *request, int idThread, user *m
   {
     strcat(response, "\t Help Section\r\n");
     strcat(response, "<< /quit\tQuit app\r\n");
-    strcat(response, "<< /vote <id>\tVote a specific melody\r\n");
-    strcat(response, "<< /category <name>\tGet the top for a category\r\n");
     strcat(response, "<< /login <username> <password>\tLog in the app\r\n");
     strcat(response, "<< /register\tRegister an account\r\n");
     strcat(response, "<< /help <username> <password>\tShow help\r\n");
+    if(me->username != NULL){
+      strcat(response, "<< /top <id>\tShow the general Top 30 meldies\r\n");
+      strcat(response, "<< /whoami\tWho am I?\r\n");
+      strcat(response, "<< /vote <id>\tVote a specific melody\r\n");
+      strcat(response, "<< /category <name>\tGet the top for a category\r\n");
+      strcat(response, "<< /add <name> <categoryId>\tAdd a melody to the top\r\n");
+      strcat(response, "<< /comment <body> <melodyID>\tComment at a melody\r\n");
+      strcat(response, "<< /showcomments <melodyId>\tComment at a melody\r\n");
+    }
     if(me->isAdmin){
       strcat(response, "<< /remove\t Remove a melody\r\n");
       strcat(response, "<< /banvote\t Ban a user from voting\r\n");
@@ -297,10 +306,27 @@ void handle_request(const int clientSocket, char *request, int idThread, user *m
   }	  
   else if (strstr(request, "/whoami"))
   {
-    if(me->username != NULL)
+    if(me->username != NULL){
       strcat(response, me->username);
-    
-    strcat(response, "Nu sunteti inregistrat");
+    }else{
+      strcat(response, "Nu sunteti inregistrat");
+    }
+  }
+  else if (strstr(request, "/comment"))
+  {
+    if(me->username != NULL){
+      postComment(request,me);
+    }else{
+      strcat(response, "Nu sunteti inregistrat");
+    }
+  }
+  else if (strstr(request, "/showcomments"))
+  {
+    if(me->username != NULL){
+      getComments(request);
+    }else{
+      strcat(response, "Nu sunteti inregistrat");
+    }
   }
   else
   {
@@ -871,3 +897,166 @@ void deleteMelody(char *request){
     return;
   }
 }
+
+
+void postComment(char *request, user *me){
+  int melodyId;
+  char comment[255];
+  char *pointer;
+  pointer = strtok(request, " ");
+  pointer = strtok(NULL, " ");
+ 
+  if (pointer != NULL)
+  {
+    strcpy(comment,pointer);
+    pointer = strtok(NULL, " ");
+  }
+  else
+  {
+    strcat(response,"Invalid format. Ex: /comment <body> <melodyId>");
+    return;
+  }
+
+  if (pointer != NULL)
+  {
+    melodyId = atoi(pointer);
+    pointer = strtok(NULL, " ");
+  }
+  else
+  {
+    strcat(response,"Invalid format. Ex: /comment <body> <melodyId>");
+    return;
+  }
+
+  char *sql = "INSERT INTO rmcom VALUES(?,?)";
+
+  dbConnection = sqlite3_prepare_v2(db, sql, -1, &sqlStatment, 0);
+
+  if (dbConnection != SQLITE_OK)
+  {
+
+    fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
+    sqlite3_close(db);
+    strcat(response,"Internal server error");
+    return;
+  }
+  sqlite3_bind_int(sqlStatment, 1, melodyId);
+  sqlite3_bind_int(sqlStatment, 2, me->userID);
+  
+
+  dbConnection = sqlite3_step(sqlStatment); 
+  if (dbConnection == SQLITE_DONE)
+  {
+    sqlite3_finalize(sqlStatment);
+  }
+  else
+  {
+    fprintf(stderr, "Failed to registering the user\n");
+    fprintf(stderr, "SQL error: %s\n", error_message);
+    sqlite3_free(error_message);
+    strcat(response,"Internal server error");
+    return;
+  }
+  
+  char *sqlQ = "INSERT INTO comments(body,id_user) VALUES(?,?)";
+
+  dbConnection = sqlite3_prepare_v2(db, sqlQ, -1, &sqlStatment, 0);
+
+  if (dbConnection != SQLITE_OK)
+  {
+
+    fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
+    sqlite3_close(db);
+    strcat(response,"Internal server error");
+    return;
+  }
+
+  sqlite3_bind_text(sqlStatment, 1, comment, -1, SQLITE_STATIC);
+  sqlite3_bind_int(sqlStatment, 2, me->userID);
+  
+
+  dbConnection = sqlite3_step(sqlStatment); 
+  if (dbConnection == SQLITE_DONE)
+  {
+    sqlite3_finalize(sqlStatment);
+  }
+  else
+  {
+    fprintf(stderr, "Failed to registering the user\n");
+    fprintf(stderr, "SQL error: %s\n", error_message);
+    sqlite3_free(error_message);
+    strcat(response,"Internal server error");
+    return;
+  }
+
+  strcat(response,"Commentul tau a fost adaugat!\n");
+}
+
+
+
+int getComment(void *NotUsed, int argc, char **argv,
+             char **azColName)
+{
+
+  NotUsed = 0;
+  char *aux;
+  for (int i = 0; i < argc; i++)
+  {
+    strcat(response, argv[i]);
+    strcat(response, " ");
+  }
+  strcat(response, "\n");
+  printf("\n");
+
+  return 0;
+}
+
+void getComments(char *request){
+  int melodyId;
+  char *pointer;
+  pointer = strtok(request, " ");
+  pointer = strtok(NULL, " ");
+
+  if (pointer != NULL)
+  {
+    melodyId = atoi(pointer);
+    pointer = strtok(NULL, " ");
+  }
+  else
+  {
+    strcat(response,"Invalid format. Ex: /showcomments <melodyId>");
+    return;
+  }
+
+  char *sql = "SELECT username,body FROM comments c JOIN users u ON c.id_user=u.id JOIN rmcom r ON r.id_melody=?";
+  bzero(response, BUFFERSIZE);
+  dbConnection = sqlite3_prepare_v2(db, sql, -1, &sqlStatment, 0);
+
+  if (dbConnection != SQLITE_OK)
+  {
+
+    fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
+    sqlite3_close(db);
+    strcat(response,"Internal server error");
+    return;
+  }
+  sqlite3_bind_int(sqlStatment, 1, melodyId);
+  
+
+  dbConnection = sqlite3_step(sqlStatment); 
+  if (dbConnection == SQLITE_DONE)
+  {
+    printf("%s:%s",sqlite3_column_text(sqlStatment,0),sqlite3_column_text(sqlStatment,1));
+    sqlite3_finalize(sqlStatment);
+  }
+  else
+  {
+    fprintf(stderr, "Failed to registering the user\n");
+    fprintf(stderr, "SQL error: %s\n", error_message);
+    sqlite3_free(error_message);
+    strcat(response,"Nu exista comentarii pentru aceasta melodie");
+    return;
+  }
+}
+
+
