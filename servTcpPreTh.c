@@ -290,7 +290,7 @@ void handle_request(const int clientSocket, char *request, int idThread, user *m
   else if (strstr(request, "/remove"))
   {
     if(me->username != NULL){
-      strcat(response, "Ai sters melodia");
+      deleteMelody(request);
     }else{
       strcat(response,"Nu sunteti inregistrat\n");
     }
@@ -823,4 +823,51 @@ void vote(char *request, user *me){
   }
 
   strcat(response,"Votul tau a fost inregistrat");
+}
+
+void deleteMelody(char *request){
+  int melodyId;
+
+  char *pointer;
+  pointer = strtok(request, " ");
+  pointer = strtok(NULL, " ");
+
+  if (pointer != NULL)
+  {
+    melodyId = atoi(pointer);
+    pointer = strtok(NULL, " ");
+  }
+  else
+  {
+    strcat(response,"Invalid format. Ex: /vote [melodyId]");
+    return;
+  }
+
+
+  char *sqlQuery = "DELETE FROM melodies WHERE id=?";
+
+  dbConnection = sqlite3_prepare_v2(db, sqlQuery, -1, &sqlStatment, 0);
+
+  if (dbConnection != SQLITE_OK)
+  {
+
+    fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
+    sqlite3_close(db);
+    strcat(response,"Internal server error");
+    return;
+  }
+  sqlite3_bind_int(sqlStatment, 1, melodyId);
+  
+
+  dbConnection = sqlite3_step(sqlStatment); 
+  if (dbConnection == SQLITE_DONE)
+  {
+    sqlite3_finalize(sqlStatment);
+    strcat(response,"Melodia a fost stearsa\n");
+  }
+  else
+  {
+    strcat(response,"Internal sever error");
+    return;
+  }
 }
