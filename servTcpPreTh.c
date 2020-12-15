@@ -57,6 +57,7 @@ void addMelody(char *request);
 void vote(char *request,user *me);
 void postComment(char *request, user *me);
 void getComments(char *request);
+void banvote(char *request);
 
 void prepareDBConnection()
 {
@@ -267,7 +268,11 @@ void handle_request(const int clientSocket, char *request, int idThread, user *m
   else if (strstr(request, "/vote"))
   {
     if(me->username != NULL){
-     vote(request,me);
+     if(me->canVote){
+      vote(request,me);
+     }else{
+      strcat(response,"Nu mai ai dreptul de a vota!\n"); 
+     }
     }else{
       strcat(response,"Nu sunteti inregistrat\n");
     }
@@ -303,7 +308,14 @@ void handle_request(const int clientSocket, char *request, int idThread, user *m
     }else{
       strcat(response,"Nu sunteti inregistrat\n");
     }
-  }	  
+  }else if (strstr(request, "/banvote"))
+  {
+    if(me->username != NULL){
+      banvote(request);
+    }else{
+      strcat(response,"Nu sunteti inregistrat\n");
+    }
+  }	  	  
   else if (strstr(request, "/whoami"))
   {
     if(me->username != NULL){
@@ -512,13 +524,13 @@ void getCategories(char *request)
   }
 
 
-  char *sqlQuery = "SELECT m.id,m.title,m.nr_voturi FROM melodies m JOIN rmcat r ON r.id_melody=m.id JOIN categories c ON c.id=r.id_category WHERE c.name=trim(?) ORDER BY m.nr_voturi DESC";
+  char *sqlQuery = "SELECT m.id,m.title,m.nr_voturi FROM melodies m JOIN rmcat r ON r.id_melody=m.id JOIN categories c ON c.id=r.id_category WHERE c.name=? ORDER BY m.nr_voturi DESC";
 
   dbConnection = sqlite3_prepare_v2(db, sqlQuery, -1, &sqlStatment, 0);
 
   if (dbConnection == SQLITE_OK)
   {
-    sqlite3_bind_text16(sqlStatment, 1, category, -1, SQLITE_STATIC);
+    sqlite3_bind_text(sqlStatment, 1, category, -1, SQLITE_STATIC);
   }
   else
   {
@@ -535,17 +547,16 @@ void getCategories(char *request)
   bzero(response, BUFFERSIZE);
   int i = 0;
   dbConnection = sqlite3_step(sqlStatment);
-  if(dbConnection == SQLITE_ROW){
-    for(int i=0; i<3; i++){
-       strcat(response, sqlite3_column_text(sqlStatment, i));
-    }
-     strcat(response, '\n');
+ 
+  while (dbConnection == SQLITE_ROW)
+  {
+      for(int i=0; i<3; i++){
+        printf("%s", sqlite3_column_text(sqlStatment, i));
+        strcat(response, sqlite3_column_text(sqlStatment, i));
+      }
+      strcat(response, "\n");
+     dbConnection = sqlite3_step(sqlStatment);
   }
-  // while ((dbConnection = sqlite3_step(sqlStatment)) == SQLITE_ROW)
-  // {
-  //   strcat(response, sqlite3_column_text(sqlStatment, i));
-  //   ++i;
-  // }
 
   printf("[server]: Rapunsul este:%s \n", response);
 
@@ -1059,4 +1070,51 @@ void getComments(char *request){
   sqlite3_finalize(sqlStatment); 
 }
 
+void banvote(char *request){
+  char username[255];
+  char *pointer;
+  pointer = strtok(request, " ");
+  pointer = strtok(NULL, " ");
 
+  if (pointer != NULL)
+  {
+    strcpy(username,pointer);
+    pointer = strtok(NULL, " ");
+  }
+  else
+  {
+    strcat(response,"Invalid format. Ex: /banvote <username>");
+    return;
+  }
+
+  char *sql = "UPDATE users SET canVote=0 WHERE username=?";
+  dbConnection = sqlite3_prepare_v2(db, sql, -1, &sqlStatment, 0);
+
+  if (dbConnection != SQLITE_OK)
+  {
+
+    fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
+    sqlite3_close(db);
+    strcat(response,"Internal server error");
+    return;
+  }
+  sqlite3_bind_text(sqlStatment, 1, username, -1, SQLITE_STATIC);
+  
+
+  dbConnection = sqlite3_step(sqlStatment); 
+  bzero(response, BUFFERSIZE);
+  if (dbConnection == SQLITE_DONE)
+  {
+    sqlite3_finalize(sqlStatment);
+  }
+  else
+  {
+    fprintf(stderr, "Failed to registering the user\n");
+    fprintf(stderr, "SQL error: %s\n", error_message);
+    sqlite3_free(error_message);
+    strcat(response,"Internal server error");
+    return;
+  }
+
+  strcat(response,"Dreptul utilizatorului de a vota a fost blocat!\n");
+}
