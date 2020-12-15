@@ -51,7 +51,7 @@ void raspunde(int cl, int idThread, user *me);
 char *registerUser(char *request);
 int checkForErrors(int exception, const char *message);
 void getTop();
-void getCategories(int clientSocket);
+void getCategories(char *request);
 void handle_request(const int clientSocket, char *request, int idThread, user *me);
 void addMelody(char *request);
 void vote(char *request,user *me);
@@ -327,12 +327,12 @@ char *registerUser(char *request)
 
   char *pointer;
   pointer = strtok(request, " ");
-  pointer = strtok(NULL, " ,.-");
+  pointer = strtok(NULL, " ");
 
   if (pointer != NULL)
   {
     strcpy(username, pointer);
-    pointer = strtok(NULL, " ,.-");
+    pointer = strtok(NULL, " ");
     printf("Username:%s\n",username);
   }
   else
@@ -343,7 +343,7 @@ char *registerUser(char *request)
   if (pointer != NULL)
   {
     strcpy(password, pointer);
-    pointer = strtok(NULL, " ,.-");
+    pointer = strtok(NULL, " ");
     printf("Passwrod:%s\n",password);
   }
   else
@@ -392,12 +392,12 @@ char* login(char* request, user *me) {
 
   char *pointer;
   pointer = strtok(request, " ");
-  pointer = strtok(NULL, " ,.-");
+  pointer = strtok(NULL, " ");
 
   if (pointer != NULL)
   {
     strcpy(username, pointer);
-    pointer = strtok(NULL, " ,.-");
+    pointer = strtok(NULL, " ");
     printf("Username:%s\n",username);
   }
   else
@@ -408,7 +408,7 @@ char* login(char* request, user *me) {
   if (pointer != NULL)
   {
     strcpy(password, pointer);
-    pointer = strtok(NULL, " ,.-");
+    pointer = strtok(NULL, " ");
     printf("Passwrod:%s\n",password);
   }
   else
@@ -465,23 +465,33 @@ char* login(char* request, user *me) {
 }
 
 
-void getCategories(int clientSocket)
+void getCategories(char *request)
 {
 
   char *category[255];
 
-  checkForErrors(write(clientSocket, "Ce categorie te intereseaza?", 255), "[Thread]Eroare la write() catre client.\n");
+  char *pointer;
+  pointer = strtok(request, " ");
+  pointer = strtok(NULL, " ");
 
-  checkForErrors(read(clientSocket, &category, 256), "[Thead] Eroare la read() de la client\n");
-  printf("[server] Am citit categoria: %s\n", category);
+  if (pointer != NULL)
+  {
+    strcpy(category, pointer);
+    pointer = strtok(NULL, " ");
+    printf("Categoria:%s\n",category);
+  }
+  else
+  {
+    return "Trebuie sa introduci o categorie\n ex: /category [categoryName]";
+  }
 
-  char *sql = "SELECT m.id,m.title,m.nr_voturi FROM melodies m JOIN rmcat r ON r.id_melody=m.id JOIN categories c ON c.id=r.id_category WHERE c.name=? ORDER BY m.nr_voturi DESC";
 
-  dbConnection = sqlite3_prepare_v2(db, sql, -1, &sqlStatment, 0);
+  char *sqlQuery = "SELECT m.id,m.title,m.nr_voturi FROM melodies m JOIN rmcat r ON r.id_melody=m.id JOIN categories c ON c.id=r.id_category WHERE c.name=trim(?) ORDER BY m.nr_voturi DESC";
+
+  dbConnection = sqlite3_prepare_v2(db, sqlQuery, -1, &sqlStatment, 0);
 
   if (dbConnection == SQLITE_OK)
   {
-
     sqlite3_bind_text16(sqlStatment, 1, category, -1, SQLITE_STATIC);
   }
   else
@@ -498,17 +508,26 @@ void getCategories(int clientSocket)
 
   bzero(response, BUFFERSIZE);
   int i = 0;
-  while ((dbConnection = sqlite3_step(dbConnection)) == SQLITE_ROW)
-  {
-    strcat(response, sqlite3_column_text(dbConnection, i));
-    ++i;
+  dbConnection = sqlite3_step(sqlStatment);
+  if(dbConnection == SQLITE_ROW){
+    for(int i=0; i<3; i++){
+       strcat(response, sqlite3_column_text(sqlStatment, i));
+    }
+     strcat(response, '\n');
   }
+  // while ((dbConnection = sqlite3_step(sqlStatment)) == SQLITE_ROW)
+  // {
+  //   strcat(response, sqlite3_column_text(sqlStatment, i));
+  //   ++i;
+  // }
 
   printf("[server]: Rapunsul este:%s \n", response);
 
   if (strlen(response) == 0)
   {
     strcat(response, "Nu exista melodii pentru aceasta categorie");
+    sqlite3_finalize(sqlStatment);
+    return;
   }
 
   if (dbConnection != SQLITE_OK)
@@ -615,7 +634,7 @@ void addMelody(char *request){
 
     fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
     sqlite3_close(db);
-  strcat(response,"Internal server error");
+    strcat(response,"Internal server error");
     return;
   }
 
@@ -736,9 +755,43 @@ void vote(char *request, user *me){
   }
   else
   {
+    strcat(response,"Internal sever error");
+    return;
+  }
+
+
+  char *sql = "INSERT INTO votes VALUES(?,?)";
+
+  dbConnection = sqlite3_prepare_v2(db, sql, -1, &sqlStatment, 0);
+
+  if (dbConnection != SQLITE_OK)
+  {
+
+    fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
+    sqlite3_close(db);
+    strcat(response,"Internal server error");
+    return;
+  }
+  sqlite3_bind_int(sqlStatment, 1, melodyId);
+  sqlite3_bind_int(sqlStatment, 2, me->userID);
+  
+
+  dbConnection = sqlite3_step(sqlStatment); 
+  if (dbConnection == SQLITE_DONE)
+  {
+    sqlite3_finalize(sqlStatment);
+  }
+  else
+  {
+    fprintf(stderr, "Failed to registering the user\n");
+    fprintf(stderr, "SQL error: %s\n", error_message);
+    sqlite3_free(error_message);
     strcat(response,"Nu Poti vota o melodie de mai multe ori");
     return;
   }
+  
+
+
 
   char *sqlQ = "UPDATE melodies SET nr_voturi=nr_voturi+1 WHERE id=?";
 
@@ -769,38 +822,5 @@ void vote(char *request, user *me){
     return;
   }
 
-
-
-
-  char *sql = "INSERT INTO votes VALUES(?,?)";
-
-  dbConnection = sqlite3_prepare_v2(db, sql, -1, &sqlStatment, 0);
-
-  if (dbConnection != SQLITE_OK)
-  {
-
-    fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
-    sqlite3_close(db);
-    strcat(response,"Internal server error");
-    return;
-  }
-  sqlite3_bind_int(sqlStatment, 1, melodyId);
-  sqlite3_bind_int(sqlStatment, 2, me->userID);
-  
-
-  dbConnection = sqlite3_step(sqlStatment); 
-  if (dbConnection == SQLITE_DONE)
-  {
-    sqlite3_finalize(sqlStatment);
-  }
-  else
-  {
-    fprintf(stderr, "Failed to registering the user\n");
-    fprintf(stderr, "SQL error: %s\n", error_message);
-    sqlite3_free(error_message);
-    strcat(response,"Internal server error");
-    return;
-  }
-  
   strcat(response,"Votul tau a fost inregistrat");
 }
