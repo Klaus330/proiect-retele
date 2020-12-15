@@ -905,8 +905,7 @@ void postComment(char *request, user *me){
   char *pointer;
   pointer = strtok(request, " ");
   pointer = strtok(NULL, " ");
- 
-  if (pointer != NULL)
+ if (pointer != NULL)
   {
     strcpy(comment,pointer);
     pointer = strtok(NULL, " ");
@@ -927,6 +926,10 @@ void postComment(char *request, user *me){
     strcat(response,"Invalid format. Ex: /comment <body> <melodyId>");
     return;
   }
+
+
+ 
+
 
   char *sql = "INSERT INTO rmcom VALUES(?,?)";
 
@@ -1029,7 +1032,7 @@ void getComments(char *request){
   }
 
   char *sql = "SELECT username,body FROM comments c JOIN users u ON c.id_user=u.id JOIN rmcom r ON r.id_melody=?";
-  bzero(response, BUFFERSIZE);
+  
   dbConnection = sqlite3_prepare_v2(db, sql, -1, &sqlStatment, 0);
 
   if (dbConnection != SQLITE_OK)
@@ -1044,19 +1047,16 @@ void getComments(char *request){
   
 
   dbConnection = sqlite3_step(sqlStatment); 
-  if (dbConnection == SQLITE_DONE)
+  bzero(response, BUFFERSIZE);
+  while (dbConnection == SQLITE_ROW)
   {
-    printf("%s:%s",sqlite3_column_text(sqlStatment,0),sqlite3_column_text(sqlStatment,1));
-    sqlite3_finalize(sqlStatment);
+    strcat(response,sqlite3_column_text(sqlStatment,0));//username
+    strcat(response,": ");
+    strcat(response,sqlite3_column_text(sqlStatment,1));//comment body
+    strcat(response,"\n");
+    dbConnection = sqlite3_step(sqlStatment); 
   }
-  else
-  {
-    fprintf(stderr, "Failed to registering the user\n");
-    fprintf(stderr, "SQL error: %s\n", error_message);
-    sqlite3_free(error_message);
-    strcat(response,"Nu exista comentarii pentru aceasta melodie");
-    return;
-  }
+  sqlite3_finalize(sqlStatment); 
 }
 
 
