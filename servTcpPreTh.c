@@ -640,22 +640,22 @@ void addMelody(char *request){
     pointer = strtok(NULL, " ");
 
 
-    // switch(validateRegEx("/(http:|https:)?\/\/(www\.)?(youtube.com|youtu.be)\/(watch)?(\?v=)?(\S+)?/", yt_link)){
-    //   case 1:
-    //   break;
-    //   case 0:
-    //     strcat(response,"Linkul nu este valid");
-    //     return;
-    //   break;
-    //   case -1:
-    //     strcat(response,"Internal Server Error");
-    //     return;
-    //   break;  
-    //   case -2:
-    //     strcat(response,"Could not compile");
-    //     return;
-    //   break;      
-    // }
+    switch(validateRegEx("(http:|https:)?\\/\\/(www\\.)?(youtube.com|youtu.be)\\/(watch)?(\\?v=)?(\\\S+)?", yt_link)){
+      case 1:
+      break;
+      case 0:
+        strcat(response,"Linkul nu este valid");
+        return;
+      break;
+      case -1:
+        strcat(response,"Internal Server Error");
+        return;
+      break;  
+      case -2:
+        strcat(response,"Could not compile");
+        return;
+      break;      
+    }
   }
   else
   {
@@ -1169,7 +1169,7 @@ int validateRegEx(char *exp,char *string)
   char error_message[100];
   printf("Linkul oferit: %s\n",string);
   /* Compile regular expression */
-  reti = regcomp(&regex, exp, 0);
+  reti = regcomp(&regex, exp, REG_EXTENDED);
   if (reti) {
       fprintf(stderr, "Could not compile regex\n");
       regfree(&regex);
