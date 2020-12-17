@@ -547,11 +547,22 @@ void getCategories(char *request)
       for(int i=0; i<3; i++){
         printf("%s", sqlite3_column_text(sqlStatment, i));
         strcat(response, sqlite3_column_text(sqlStatment, i));
+        strcat(response, " ");
       }
+      printf("\n");
       strcat(response, "\n");
      dbConnection = sqlite3_step(sqlStatment);
   }
 
+
+  //  while (dbConnection == SQLITE_ROW)
+  // {
+  //   strcat(response,sqlite3_column_text(sqlStatment,0));//username
+  //   strcat(response,": ");
+  //   strcat(response,sqlite3_column_text(sqlStatment,1));//comment body
+  //   strcat(response,"\n");
+  //   dbConnection = sqlite3_step(sqlStatment); 
+  // }
   printf("[server]: Rapunsul este:%s \n", response);
 
   if (strlen(response) == 0)
@@ -561,7 +572,7 @@ void getCategories(char *request)
     return;
   }
 
-  if (dbConnection != SQLITE_OK)
+  if (dbConnection != SQLITE_DONE)
   {
 
     fprintf(stderr, "Failed to select data\n");
