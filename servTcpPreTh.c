@@ -11,6 +11,8 @@
 #include <sqlite3.h>
 #include <assert.h>
 #include <regex.h> 
+#include <crypt.h>
+#include <unistd.h>
 /* portul folosit */
 #define PORT 2909
 #define BUFFERSIZE 4096
@@ -381,9 +383,9 @@ char *registerUser(char *request)
 
   if (pointer != NULL)
   {
-    strcpy(password, pointer);
+    strcpy(password, crypt(pointer,"k7"));
     pointer = strtok(NULL, " ");
-    printf("Passwrod:%s\n",password);
+    printf("Passwrod:%s\n",password); 
   }
   else
   {
@@ -445,7 +447,7 @@ char* login(char* request, user *me) {
 
   if (pointer != NULL)
   {
-    strcpy(password, pointer);
+    strcpy(password, crypt(pointer,"k7"));
     pointer = strtok(NULL, " ");
     printf("Passwrod:%s\n",password);
   }
@@ -554,15 +556,6 @@ void getCategories(char *request)
      dbConnection = sqlite3_step(sqlStatment);
   }
 
-
-  //  while (dbConnection == SQLITE_ROW)
-  // {
-  //   strcat(response,sqlite3_column_text(sqlStatment,0));//username
-  //   strcat(response,": ");
-  //   strcat(response,sqlite3_column_text(sqlStatment,1));//comment body
-  //   strcat(response,"\n");
-  //   dbConnection = sqlite3_step(sqlStatment); 
-  // }
   printf("[server]: Rapunsul este:%s \n", response);
 
   if (strlen(response) == 0)
