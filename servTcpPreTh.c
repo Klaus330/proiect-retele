@@ -10,6 +10,7 @@
 #include <pthread.h>
 #include <sqlite3.h>
 #include <assert.h>
+#include <regex.h> 
 /* portul folosit */
 #define PORT 2909
 #define BUFFERSIZE 4096
@@ -58,7 +59,7 @@ void vote(char *request,user *me);
 void postComment(char *request, user *me);
 void getComments(char *request);
 void banvote(char *request);
-
+int validateRegEx(char *regex, char *str);
 void prepareDBConnection()
 {
   dbConnection = sqlite3_open("rc.db", &db);
@@ -436,7 +437,6 @@ char* login(char* request, user *me) {
   {
     strcpy(username, pointer);
     pointer = strtok(NULL, " ");
-    printf("Username:%s\n",username);
   }
   else
   {
@@ -484,7 +484,7 @@ char* login(char* request, user *me) {
 
     bzero(response, BUFFERSIZE);
    
-    return "Internal server error";
+    return "Input invalid. Please check again your credentials.";
   }
 
 
@@ -492,12 +492,6 @@ char* login(char* request, user *me) {
   me->username  = username;
   me->isAdmin = sqlite3_column_int(sqlStatment,2);
   me->canVote = sqlite3_column_int(sqlStatment,3);
-
-
-  printf("username:%s\n",me->username);
-  printf("userid:%d\n",me->userID);
-  printf("isAdmin:%d\n",me->isAdmin);
-  printf("canVote:%d\n",me->canVote);
 
   return "You are logged in.";
 }
@@ -644,6 +638,24 @@ void addMelody(char *request){
   {
     strcpy(yt_link, pointer);
     pointer = strtok(NULL, " ");
+
+
+    // switch(validateRegEx("/(http:|https:)?\/\/(www\.)?(youtube.com|youtu.be)\/(watch)?(\?v=)?(\S+)?/", yt_link)){
+    //   case 1:
+    //   break;
+    //   case 0:
+    //     strcat(response,"Linkul nu este valid");
+    //     return;
+    //   break;
+    //   case -1:
+    //     strcat(response,"Internal Server Error");
+    //     return;
+    //   break;  
+    //   case -2:
+    //     strcat(response,"Could not compile");
+    //     return;
+    //   break;      
+    // }
   }
   else
   {
@@ -1117,4 +1129,37 @@ void banvote(char *request){
   }
 
   strcat(response,"Dreptul utilizatorului de a vota a fost blocat!\n");
+}
+
+
+int validateRegEx(char *exp,char *string)
+{
+  regex_t regex;
+  int reti;
+  char error_message[100];
+  printf("Linkul oferit: %s\n",string);
+  /* Compile regular expression */
+  reti = regcomp(&regex, exp, 0);
+  if (reti) {
+      fprintf(stderr, "Could not compile regex\n");
+      regfree(&regex);
+      return -2;
+  }
+
+  /* Execute regular expression */
+  reti = regexec(&regex, string, 0, NULL, 0);
+  if (!reti) {
+      regfree(&regex);
+      return 1;
+  }
+  else if (reti == REG_NOMATCH) {
+      regfree(&regex);
+      return 0;
+  }
+  else {
+      regerror(reti, &regex, error_message, sizeof(error_message));
+      fprintf(stderr, "Regex match failed: %s\n", error_message);
+    regfree(&regex);
+      return -1;
+  }
 }
