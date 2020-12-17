@@ -950,40 +950,6 @@ void postComment(char *request, user *me){
     return;
   }
 
-
- 
-
-
-  char *sql = "INSERT INTO rmcom VALUES(?,?)";
-
-  dbConnection = sqlite3_prepare_v2(db, sql, -1, &sqlStatment, 0);
-
-  if (dbConnection != SQLITE_OK)
-  {
-
-    fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
-    sqlite3_close(db);
-    strcat(response,"Internal server error");
-    return;
-  }
-  sqlite3_bind_int(sqlStatment, 1, melodyId);
-  sqlite3_bind_int(sqlStatment, 2, me->userID);
-  
-
-  dbConnection = sqlite3_step(sqlStatment); 
-  if (dbConnection == SQLITE_DONE)
-  {
-    sqlite3_finalize(sqlStatment);
-  }
-  else
-  {
-    fprintf(stderr, "Failed to registering the user\n");
-    fprintf(stderr, "SQL error: %s\n", error_message);
-    sqlite3_free(error_message);
-    strcat(response,"Internal server error");
-    return;
-  }
-  
   char *sqlQ = "INSERT INTO comments(body,id_user) VALUES(?,?)";
 
   dbConnection = sqlite3_prepare_v2(db, sqlQ, -1, &sqlStatment, 0);
@@ -1014,6 +980,63 @@ void postComment(char *request, user *me){
     strcat(response,"Internal server error");
     return;
   }
+ 
+
+   int commentID=0;
+  char *sql = "SELECT id FROM comments ORDER BY id DESC LIMIT 1";
+  bzero(response, BUFFERSIZE);
+  dbConnection = sqlite3_prepare_v2(db, sql, -1, &sqlStatment, 0);
+  
+  dbConnection = sqlite3_step(sqlStatment); 
+  if (dbConnection == SQLITE_ROW)
+  {
+    commentID = sqlite3_column_int(sqlStatment,0);
+    printf("commentId:%d\n",commentID);
+    printf("AM trecut si pe aici\n");
+  }else
+  {
+    fprintf(stderr, "Failed to select data\n");
+    fprintf(stderr, "SQL error: %s\n", error_message);
+
+    sqlite3_free(error_message);
+    // sqlite3_close(db);
+    sqlite3_finalize(sqlStatment);
+    bzero(response, BUFFERSIZE);
+    strcat(response,"Internal server error");
+    return;
+  }
+
+  char *string = "INSERT INTO rmcom VALUES(?,?)";
+
+  dbConnection = sqlite3_prepare_v2(db, string, -1, &sqlStatment, 0);
+
+  if (dbConnection != SQLITE_OK)
+  {
+
+    fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
+    sqlite3_close(db);
+    strcat(response,"Internal server error");
+    return;
+  }
+  sqlite3_bind_int(sqlStatment, 1, melodyId);
+  sqlite3_bind_int(sqlStatment, 2, commentID);
+  
+
+  dbConnection = sqlite3_step(sqlStatment); 
+  if (dbConnection == SQLITE_DONE)
+  {
+    sqlite3_finalize(sqlStatment);
+  }
+  else
+  {
+    fprintf(stderr, "Failed to registering the user\n");
+    fprintf(stderr, "SQL error: %s\n", error_message);
+    sqlite3_free(error_message);
+    strcat(response,"Internal server error");
+    return;
+  }
+  
+ 
 
   strcat(response,"Commentul tau a fost adaugat!\n");
 }
@@ -1054,7 +1077,7 @@ void getComments(char *request){
     return;
   }
 
-  char *sql = "SELECT username,body FROM comments c JOIN users u ON c.id_user=u.id JOIN rmcom r ON r.id_melody=?";
+  char *sql = "SELECT username,body FROM comments c JOIN users u ON c.id_user=u.id JOIN rmcom r ON r.id_melody=? AND r.id_comment=c.id";
   
   dbConnection = sqlite3_prepare_v2(db, sql, -1, &sqlStatment, 0);
 
@@ -1079,6 +1102,13 @@ void getComments(char *request){
     strcat(response,"\n");
     dbConnection = sqlite3_step(sqlStatment); 
   }
+
+
+  if(strlen(response) == 0)
+  {
+    strcat(response,"Nu exista comentarii pentru aceasta melodie\n");
+  }
+
   sqlite3_finalize(sqlStatment); 
 }
 
