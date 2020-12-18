@@ -64,6 +64,10 @@ void postComment(char *request, user *me);
 void getComments(char *request);
 void banvote(char *request);
 int validateRegEx(char *regex, char *str);
+void expandThreadPool();
+void contractThreadPool();
+
+
 void prepareDBConnection()
 {
   dbConnection = sqlite3_open("rc.db", &db);
@@ -146,22 +150,9 @@ int main(int argc, char *argv[])
   {
     printf("[server]Asteptam la portul %d...\n", PORT);
     while(1){
-      if(nrActiveThreads >= nthreads){
-      printf("nrA:%d nr:%d\n",nrActiveThreads,nthreads);
-        size_t myarray_size = nthreads;
-
-        myarray_size += 1;
-        Thread* newthreadsPool = realloc(threadsPool, myarray_size * sizeof(Thread));
-        if (newthreadsPool) {
-          threadsPool = newthreadsPool;
-        } else {
-          // deal with realloc failing because memory could not be allocated.
-        }
-
-        nthreads++;
-        threadCreate(nthreads);
-        printf("Am creat un nou thread!\n");
-      }
+     if(nrActiveThreads == nthreads){
+       expandThreadPool();
+     }
     }
   }
 
@@ -216,6 +207,10 @@ void *treat(void *arg)
     raspunde(client, (int)arg, &me); //procesarea cererii
     /* am terminat cu acest client, inchidem conexiunea */
     close(client);
+    printf("nrA:%d nr:%d", nrActiveThreads, nthreads);
+    if(nrActiveThreads != nthreads && nthreads > 1){
+       contractThreadPool();
+    }
     nrActiveThreads--;
   }
   sqlite3_close(db);
@@ -1217,4 +1212,39 @@ int validateRegEx(char *exp,char *string)
     regfree(&regex);
       return -1;
   }
+}
+
+
+void expandThreadPool(){
+  printf("nrA:%d nr:%d\n",nrActiveThreads,nthreads);
+  size_t myarray_size = nthreads;
+
+  myarray_size += 1;
+  Thread* newthreadsPool = realloc(threadsPool, myarray_size * sizeof(Thread));
+  if (newthreadsPool) {
+    threadsPool = newthreadsPool;
+  } else {
+  // deal with realloc failing because memory could not be allocated.
+  }
+
+  nthreads++;
+  threadCreate(nthreads);
+  printf("Am creat un nou thread!\n");
+  
+}
+
+void contractThreadPool(){
+
+  size_t myarray_size = nthreads;
+
+  myarray_size -= 1;
+  Thread* newthreadsPool = realloc(threadsPool, myarray_size * sizeof(Thread));
+  if (newthreadsPool) {
+    threadsPool = newthreadsPool;
+  } else {
+    
+  }
+  nthreads--;
+  printf("Am sters un thread!\n");
+  
 }
