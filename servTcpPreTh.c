@@ -8,11 +8,13 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <pthread.h>
-#include <sqlite3.h>
 #include <assert.h>
 #include <regex.h> 
 #include <crypt.h>
 #include <unistd.h>
+
+#include <sqlite3.h>
+#include <stdio.h>
 /* portul folosit */
 #define PORT 2909
 #define BUFFERSIZE 4096
@@ -40,16 +42,19 @@ typedef struct
 Thread *threadsPool; //un array de structuri Thread
 
 char response[BUFFERSIZE];
-sqlite3 *db;
-sqlite3_stmt *sqlStatment;
-int dbConnection;
-char *error_message;
 int sd;                                            //descriptorul de socket de ascultare
 int nthreads;                                      //numarul de threaduri
 pthread_mutex_t mlock = PTHREAD_MUTEX_INITIALIZER; // variabila mutex ce va fi partajata de threaduri
 int nrActiveThreads = 0;
 
 
+sqlite3 *db;
+sqlite3_stmt *sqlStatment;
+int dbConnection;
+char *error_message;
+
+int prepareQuery(char *sqlQuery);
+int checkIfQueryDone(int code);
 // Functions
 char* login(char* request, user *me);
 void raspunde(int cl, int idThread, user *me);
@@ -410,34 +415,14 @@ char *registerUser(char *request)
 
   char *sqlQuery = "INSERT INTO users(username,password,isAdmin) VALUES(?,?,?)";
  
-  dbConnection = sqlite3_prepare_v2(db, sqlQuery, -1, &sqlStatment, 0);
-
-  if (dbConnection != SQLITE_OK)
-  {
-
-    fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
-    sqlite3_close(db);
-
-    return "Internal server error";
-  }
+  checkForErrors(prepareQuery(sqlQuery),"[category]Could not prepare the SQL Query!\n");
 
   sqlite3_bind_text(sqlStatment, 1, username, -1, SQLITE_STATIC);
   sqlite3_bind_text(sqlStatment, 2, password, -1, SQLITE_STATIC);
   sqlite3_bind_int(sqlStatment, 3, 0);
 
   dbConnection = sqlite3_step(sqlStatment); 
-  if (dbConnection == SQLITE_DONE)
-  {
-    sqlite3_finalize(sqlStatment);
-  }
-  else
-  {
-    fprintf(stderr, "Failed to registering the user\n");
-    fprintf(stderr, "SQL error: %s\n", error_message);
-    sqlite3_free(error_message);
-    return "Internal Server Error";
-  }
-
+  checkForErrors(checkIfQueryDone(dbConnection), "[login]Error at finishing the query!\n");
   return "You have been registerd, please log in.";
 }
 
@@ -475,16 +460,7 @@ char* login(char* request, user *me) {
   char* sqlQuery ="SELECT id, username, isAdmin, canVote FROM users WHERE username=? AND password=?";
 
 
-  dbConnection = sqlite3_prepare_v2(db, sqlQuery, -1, &sqlStatment, 0);
-
-  if (dbConnection != SQLITE_OK)
-  {
-
-    fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
-    sqlite3_close(db);
-
-    return "Internal server error";
-  }
+   checkForErrors(prepareQuery(sqlQuery),"[login]Could not prepare the SQL Query!\n");
 
   sqlite3_bind_text(sqlStatment, 1, username, -1, SQLITE_STATIC);
   sqlite3_bind_text(sqlStatment, 2, password, -1, SQLITE_STATIC);
@@ -510,7 +486,7 @@ char* login(char* request, user *me) {
   me->username  = username;
   me->isAdmin = sqlite3_column_int(sqlStatment,2);
   me->canVote = sqlite3_column_int(sqlStatment,3);
-
+  
   return "You are logged in.";
 }
 
@@ -538,23 +514,7 @@ void getCategories(char *request)
 
   char *sqlQuery = "SELECT m.id,m.title,m.nr_voturi FROM melodies m JOIN rmcat r ON r.id_melody=m.id JOIN categories c ON c.id=r.id_category WHERE c.name=? ORDER BY m.nr_voturi DESC";
 
-  dbConnection = sqlite3_prepare_v2(db, sqlQuery, -1, &sqlStatment, 0);
-
-  if (dbConnection == SQLITE_OK)
-  {
-    sqlite3_bind_text(sqlStatment, 1, category, -1, SQLITE_STATIC);
-  }
-  else
-  {
-
-    fprintf(stderr, "Failed to execute statement: %s\n", sqlite3_errmsg(db));
-    sqlite3_finalize(sqlStatment);
-    sqlite3_free(error_message);
-    sqlite3_close(db);
-    bzero(response, BUFFERSIZE);
-    strcat(response, "500 Internal server error\n");
-    return;
-  }
+  checkForErrors(prepareQuery(sqlQuery),"[category]Could not prepare the SQL Query!\n");
 
   bzero(response, BUFFERSIZE);
   int i = 0;
@@ -581,19 +541,7 @@ void getCategories(char *request)
     return;
   }
 
-  if (dbConnection != SQLITE_DONE)
-  {
-
-    fprintf(stderr, "Failed to select data\n");
-    fprintf(stderr, "SQL error: %s\n", error_message);
-    sqlite3_finalize(sqlStatment);
-    sqlite3_free(error_message);
-    sqlite3_close(db);
-    bzero(response, BUFFERSIZE);
-    strcat(response, "500 Internal server error\n");
-    return;
-  }
-  sqlite3_finalize(sqlStatment);
+  checkForErrors(checkIfQueryDone(dbConnection), "[category]Error at finishing the query!\n");
 }
 
 
@@ -635,6 +583,25 @@ void getTop()
   }
 }
 
+void validateYtLink(char *link){
+   switch(validateRegEx("(http:|https:)?\\/\\/(www\\.)?(youtube.com|youtu.be)\\/(watch)?(\\?v=)?(\\\S+)?", link)){
+      case 1:
+      break;
+      case 0:
+        strcat(response,"Linkul nu este valid");
+        return;
+      break;
+      case -1:
+        strcat(response,"Internal Server Error");
+        return;
+      break;  
+      case -2:
+        strcat(response,"Could not compile");
+        return;
+      break;      
+    }
+}
+
 void addMelody(char *request){
   char melody[255];
   int categoryId;
@@ -658,24 +625,7 @@ void addMelody(char *request){
   {
     strcpy(yt_link, pointer);
     pointer = strtok(NULL, " ");
-
-
-    switch(validateRegEx("(http:|https:)?\\/\\/(www\\.)?(youtube.com|youtu.be)\\/(watch)?(\\?v=)?(\\\S+)?", yt_link)){
-      case 1:
-      break;
-      case 0:
-        strcat(response,"Linkul nu este valid");
-        return;
-      break;
-      case -1:
-        strcat(response,"Internal Server Error");
-        return;
-      break;  
-      case -2:
-        strcat(response,"Could not compile");
-        return;
-      break;      
-    }
+    validateYtLink(yt_link);
   }
   else
   {
@@ -696,38 +646,18 @@ void addMelody(char *request){
 
   char *sqlQuery = "INSERT INTO melodies(title,yt_link) VALUES(?,?)";
 
-  dbConnection = sqlite3_prepare_v2(db, sqlQuery, -1, &sqlStatment, 0);
-
-  if (dbConnection != SQLITE_OK)
-  {
-
-    fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
-    sqlite3_close(db);
-    strcat(response,"Internal server error");
-    return;
-  }
+  checkForErrors(prepareQuery(sqlQuery),"[add]Could not prepare the SQL Query!\n");
 
   sqlite3_bind_text(sqlStatment, 1, melody, -1, SQLITE_STATIC);
   sqlite3_bind_text(sqlStatment, 2, yt_link, -1, SQLITE_STATIC);
 
   dbConnection = sqlite3_step(sqlStatment); 
-  if (dbConnection == SQLITE_DONE)
-  {
-    sqlite3_finalize(sqlStatment);
-  }
-  else
-  {
-    fprintf(stderr, "Failed to registering the user\n");
-    fprintf(stderr, "SQL error: %s\n", error_message);
-    sqlite3_free(error_message);
-    strcat(response,"Internal server error");
-    return;
-  }
+  checkForErrors(checkIfQueryDone(dbConnection), "[add]Error at finishing the query!\n");
 
   int melodyId=0;
   char *sql = "SELECT id FROM melodies ORDER BY id DESC LIMIT 1";
   bzero(response, BUFFERSIZE);
-  dbConnection = sqlite3_prepare_v2(db, sql, -1, &sqlStatment, 0);
+  checkForErrors(prepareQuery(sql),"[add]Could not prepare the SQL Query!\n");
   
   dbConnection = sqlite3_step(sqlStatment); 
   if (dbConnection == SQLITE_ROW)
@@ -741,7 +671,6 @@ void addMelody(char *request){
     fprintf(stderr, "SQL error: %s\n", error_message);
 
     sqlite3_free(error_message);
-    // sqlite3_close(db);
     sqlite3_finalize(sqlStatment);
     bzero(response, BUFFERSIZE);
     strcat(response,"Internal server error");
@@ -751,33 +680,13 @@ void addMelody(char *request){
   
   char *sqlQ = "INSERT INTO rmcat VALUES(?,?)";
 
-  dbConnection = sqlite3_prepare_v2(db, sqlQ, -1, &sqlStatment, 0);
-
-  if (dbConnection != SQLITE_OK)
-  {
-
-    fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
-    sqlite3_close(db);
-    strcat(response,"Internal server error");
-    return;
-  }
+  checkForErrors(prepareQuery(sqlQ),"[add]Could not prepare the SQL Query!\n");
   sqlite3_bind_int(sqlStatment, 1, melodyId);
   sqlite3_bind_int(sqlStatment, 2, categoryId);
   
 
   dbConnection = sqlite3_step(sqlStatment); 
-  if (dbConnection == SQLITE_DONE)
-  {
-    sqlite3_finalize(sqlStatment);
-  }
-  else
-  {
-    fprintf(stderr, "Failed to registering the user\n");
-    fprintf(stderr, "SQL error: %s\n", error_message);
-    sqlite3_free(error_message);
-    strcat(response,"Internal server error");
-    return;
-  }
+  checkForErrors(checkIfQueryDone(dbConnection), "[add]Error at finishing the query!\n");
 
   strcat(response,"You've added a new melody");
 }
@@ -801,95 +710,35 @@ void vote(char *request, user *me){
     return;
   }
 
-
+  // Check to see if there is a melody with the provided id
   char *sqlQuery = "SELECT COUNT(*) FROM melodies WHERE id=?";
 
-  dbConnection = sqlite3_prepare_v2(db, sqlQuery, -1, &sqlStatment, 0);
-
-  if (dbConnection != SQLITE_OK)
-  {
-
-    fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
-    sqlite3_close(db);
-    strcat(response,"Internal server error");
-    return;
-  }
+  checkForErrors(prepareQuery(sqlQuery),"[vote]Could not prepare the SQL Query!\n");
   sqlite3_bind_int(sqlStatment, 1, melodyId);
   
-
   dbConnection = sqlite3_step(sqlStatment); 
-  if (dbConnection != SQLITE_DONE)
-  {
-    sqlite3_finalize(sqlStatment);
-  }
-  else
-  {
-    strcat(response,"Internal sever error");
-    return;
-  }
+  checkForErrors(checkIfQueryDone(dbConnection), "[vote]Error at finishing the query!\n");
 
-
+  // Add the vote relationship to the votes table
   char *sql = "INSERT INTO votes VALUES(?,?)";
 
-  dbConnection = sqlite3_prepare_v2(db, sql, -1, &sqlStatment, 0);
+  checkForErrors(prepareQuery(sql),"[vote]Could not prepare the SQL Query!\n");
 
-  if (dbConnection != SQLITE_OK)
-  {
-
-    fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
-    sqlite3_close(db);
-    strcat(response,"Internal server error");
-    return;
-  }
   sqlite3_bind_int(sqlStatment, 1, melodyId);
   sqlite3_bind_int(sqlStatment, 2, me->userID);
   
-
   dbConnection = sqlite3_step(sqlStatment); 
-  if (dbConnection == SQLITE_DONE)
-  {
-    sqlite3_finalize(sqlStatment);
-  }
-  else
-  {
-    fprintf(stderr, "Failed to registering the user\n");
-    fprintf(stderr, "SQL error: %s\n", error_message);
-    sqlite3_free(error_message);
-    strcat(response,"Nu Poti vota o melodie de mai multe ori");
-    return;
-  }
-  
+  checkForErrors(checkIfQueryDone(dbConnection), "[vote]Error at finishing the query!\n");
 
-
-
+  // Add the new vote to the melody
   char *sqlQ = "UPDATE melodies SET nr_voturi=nr_voturi+1 WHERE id=?";
 
-  dbConnection = sqlite3_prepare_v2(db, sqlQ, -1, &sqlStatment, 0);
+  checkForErrors(prepareQuery(sqlQ),"[vote]Could not prepare the SQL Query!\n");
 
-  if (dbConnection != SQLITE_OK)
-  {
-
-    fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
-    sqlite3_close(db);
-    strcat(response,"Internal server error");
-    return;
-  }
   sqlite3_bind_int(sqlStatment, 1, melodyId);
-  
 
   dbConnection = sqlite3_step(sqlStatment); 
-  if (dbConnection == SQLITE_DONE)
-  {
-    sqlite3_finalize(sqlStatment);
-  }
-  else
-  {
-    fprintf(stderr, "Failed to registering the user\n");
-    fprintf(stderr, "SQL error: %s\n", error_message);
-    sqlite3_free(error_message);
-    strcat(response,"Internal server error");
-    return;
-  }
+  checkForErrors(checkIfQueryDone(dbConnection), "[vote]Error at finishing the query!\n");
 
   strcat(response,"Votul tau a fost inregistrat");
 }
@@ -915,149 +764,91 @@ void deleteMelody(char *request){
 
   char *sqlQuery = "DELETE FROM melodies WHERE id=?";
 
-  dbConnection = sqlite3_prepare_v2(db, sqlQuery, -1, &sqlStatment, 0);
-
-  if (dbConnection != SQLITE_OK)
-  {
-
-    fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
-    sqlite3_close(db);
-    strcat(response,"Internal server error");
-    return;
-  }
+  checkForErrors(prepareQuery(sqlQuery),"[deleteMelody]Could not prepare the SQL Query!\n");
   sqlite3_bind_int(sqlStatment, 1, melodyId);
-  
 
   dbConnection = sqlite3_step(sqlStatment); 
-  if (dbConnection == SQLITE_DONE)
-  {
-    sqlite3_finalize(sqlStatment);
-    strcat(response,"Melodia a fost stearsa\n");
-  }
-  else
-  {
-    strcat(response,"Internal sever error");
-    return;
-  }
+  checkForErrors(checkIfQueryDone(dbConnection), "[deleteMelody]Error at finishing the query!\n");
+  
+  strcat(response,"Melodia a fost stearsa\n");
 }
 
 
-void postComment(char *request, user *me){
-  int melodyId;
-  char comment[255];
-  char *pointer;
-  pointer = strtok(request, " ");
-  pointer = strtok(NULL, " ");
- if (pointer != NULL)
-  {
-    strcpy(comment,pointer);
-    pointer = strtok(NULL, " ");
-  }
-  else
-  {
-    strcat(response,"Invalid format. Ex: /comment <body> <melodyId>");
-    return;
-  }
-
-  if (pointer != NULL)
-  {
-    melodyId = atoi(pointer);
-    pointer = strtok(NULL, " ");
-  }
-  else
-  {
-    strcat(response,"Invalid format. Ex: /comment <body> <melodyId>");
-    return;
-  }
-
-  char *sqlQ = "INSERT INTO comments(body,id_user) VALUES(?,?)";
-
-  dbConnection = sqlite3_prepare_v2(db, sqlQ, -1, &sqlStatment, 0);
-
-  if (dbConnection != SQLITE_OK)
-  {
-
-    fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
-    sqlite3_close(db);
-    strcat(response,"Internal server error");
-    return;
-  }
-
-  sqlite3_bind_text(sqlStatment, 1, comment, -1, SQLITE_STATIC);
-  sqlite3_bind_int(sqlStatment, 2, me->userID);
-  
-
-  dbConnection = sqlite3_step(sqlStatment); 
-  if (dbConnection == SQLITE_DONE)
-  {
-    sqlite3_finalize(sqlStatment);
-  }
-  else
-  {
-    fprintf(stderr, "Failed to registering the user\n");
-    fprintf(stderr, "SQL error: %s\n", error_message);
-    sqlite3_free(error_message);
-    strcat(response,"Internal server error");
-    return;
-  }
- 
-
-   int commentID=0;
+int getLastCommentID(){
+  int commentID=0;
   char *sql = "SELECT id FROM comments ORDER BY id DESC LIMIT 1";
   bzero(response, BUFFERSIZE);
-  dbConnection = sqlite3_prepare_v2(db, sql, -1, &sqlStatment, 0);
+  checkForErrors(prepareQuery(sql),"[getLastCommentID]Could not prepare the SQL Query!\n");
   
   dbConnection = sqlite3_step(sqlStatment); 
   if (dbConnection == SQLITE_ROW)
   {
     commentID = sqlite3_column_int(sqlStatment,0);
-    printf("commentId:%d\n",commentID);
-    printf("AM trecut si pe aici\n");
+    return commentID;
   }else
   {
     fprintf(stderr, "Failed to select data\n");
     fprintf(stderr, "SQL error: %s\n", error_message);
 
     sqlite3_free(error_message);
-    // sqlite3_close(db);
     sqlite3_finalize(sqlStatment);
-    bzero(response, BUFFERSIZE);
-    strcat(response,"Internal server error");
-    return;
+    return -1;
   }
+}
 
-  char *string = "INSERT INTO rmcom VALUES(?,?)";
+void postComment(char *request, user *me){
+  int melodyId;
+  char comment[255];
+  char *pointer;
 
-  dbConnection = sqlite3_prepare_v2(db, string, -1, &sqlStatment, 0);
-
-  if (dbConnection != SQLITE_OK)
-  {
-
-    fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
-    sqlite3_close(db);
-    strcat(response,"Internal server error");
-    return;
+  int i=9,j=0;
+  while(request[i] != '#'){
+    comment[j++]=request[i];
+    i++;
   }
-  sqlite3_bind_int(sqlStatment, 1, melodyId);
-  sqlite3_bind_int(sqlStatment, 2, commentID);
+  printf("[server] Comment:%s\n",comment);
+  pointer = strtok(request, "#");
+  pointer = strtok(NULL, "#");
   
-
-  dbConnection = sqlite3_step(sqlStatment); 
-  if (dbConnection == SQLITE_DONE)
+  if (pointer != NULL)
   {
-    sqlite3_finalize(sqlStatment);
+    printf("[server] %s\n",pointer);
+    melodyId = atoi(pointer);
   }
   else
   {
-    fprintf(stderr, "Failed to registering the user\n");
-    fprintf(stderr, "SQL error: %s\n", error_message);
-    sqlite3_free(error_message);
+    strcat(response,"Invalid format. Ex: /comment <body> <melodyId>");
+    return;
+  }
+
+  // Insert the comment in the DB
+  char *sqlQ = "INSERT INTO comments(body,id_user) VALUES(?,?)";
+  checkForErrors(prepareQuery(sqlQ),"[postComment]Could not prepare the SQL Query!\n");
+
+  sqlite3_bind_text(sqlStatment, 1, comment, -1, SQLITE_STATIC);
+  sqlite3_bind_int(sqlStatment, 2, me->userID);
+  
+  dbConnection = sqlite3_step(sqlStatment); 
+  
+  checkForErrors(checkIfQueryDone(dbConnection), "[postComment]Error at finishing the query!\n");
+
+  // Get the last comment ID
+  int commentID;
+  if((commentID = getLastCommentID()) == -1){
     strcat(response,"Internal server error");
     return;
   }
-  
- 
 
+  // Insert the relationship between melody and comment
+  char *string = "INSERT INTO rmcom VALUES(?,?)";
+  checkForErrors(prepareQuery(string),"[postComment]Could not prepare the SQL Query!\n");
+
+  sqlite3_bind_int(sqlStatment, 1, melodyId);
+  sqlite3_bind_int(sqlStatment, 2, commentID);
+  
+  dbConnection = sqlite3_step(sqlStatment); 
+  checkForErrors(checkIfQueryDone(dbConnection), "[postComment]Error at finishing the query!\n");
+  
   strcat(response,"Commentul tau a fost adaugat!\n");
 }
 
@@ -1099,16 +890,7 @@ void getComments(char *request){
 
   char *sql = "SELECT username,body FROM comments c JOIN users u ON c.id_user=u.id JOIN rmcom r ON r.id_melody=? AND r.id_comment=c.id";
   
-  dbConnection = sqlite3_prepare_v2(db, sql, -1, &sqlStatment, 0);
-
-  if (dbConnection != SQLITE_OK)
-  {
-
-    fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
-    sqlite3_close(db);
-    strcat(response,"Internal server error");
-    return;
-  }
+  checkForErrors(prepareQuery(sql),"[getComments]Could not prepare the SQL Query!\n");
   sqlite3_bind_int(sqlStatment, 1, melodyId);
   
 
@@ -1129,7 +911,7 @@ void getComments(char *request){
     strcat(response,"Nu exista comentarii pentru aceasta melodie\n");
   }
 
-  sqlite3_finalize(sqlStatment); 
+   checkForErrors(checkIfQueryDone(dbConnection), "[getComments]Error at finishing the query!\n"); 
 }
 
 void banvote(char *request){
@@ -1150,33 +932,12 @@ void banvote(char *request){
   }
 
   char *sql = "UPDATE users SET canVote=0 WHERE username=?";
-  dbConnection = sqlite3_prepare_v2(db, sql, -1, &sqlStatment, 0);
-
-  if (dbConnection != SQLITE_OK)
-  {
-
-    fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
-    sqlite3_close(db);
-    strcat(response,"Internal server error");
-    return;
-  }
+  checkForErrors(prepareQuery(sql),"[getComments]Could not prepare the SQL Query!\n");
   sqlite3_bind_text(sqlStatment, 1, username, -1, SQLITE_STATIC);
   
-
   dbConnection = sqlite3_step(sqlStatment); 
   bzero(response, BUFFERSIZE);
-  if (dbConnection == SQLITE_DONE)
-  {
-    sqlite3_finalize(sqlStatment);
-  }
-  else
-  {
-    fprintf(stderr, "Failed to registering the user\n");
-    fprintf(stderr, "SQL error: %s\n", error_message);
-    sqlite3_free(error_message);
-    strcat(response,"Internal server error");
-    return;
-  }
+  checkForErrors(checkIfQueryDone(dbConnection), "[getComments]Error at finishing the query!\n"); 
 
   strcat(response,"Dreptul utilizatorului de a vota a fost blocat!\n");
 }
@@ -1247,4 +1008,32 @@ void contractThreadPool(){
   nthreads--;
   printf("Am sters un thread!\n");
   
+}
+
+int prepareQuery(char *sqlQuery){
+  dbConnection = sqlite3_prepare_v2(db, sqlQuery, -1, &sqlStatment, 0);
+
+  if (dbConnection != SQLITE_OK)
+  {
+
+    fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));
+    sqlite3_close(db);
+    return -1;
+  }
+  return 0;
+}
+
+int checkIfQueryDone(int code){
+   if (code == SQLITE_DONE)
+  {
+    sqlite3_finalize(sqlStatment);
+    return 0;
+  }
+  else
+  {
+    fprintf(stderr, "Failed to registering the user\n");
+    fprintf(stderr, "SQL error: %s\n", error_message);
+    sqlite3_free(error_message);
+    return -1;
+  }
 }
