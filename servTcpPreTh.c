@@ -47,6 +47,8 @@ char *error_message;
 int sd;                                            //descriptorul de socket de ascultare
 int nthreads;                                      //numarul de threaduri
 pthread_mutex_t mlock = PTHREAD_MUTEX_INITIALIZER; // variabila mutex ce va fi partajata de threaduri
+int nrActiveThreads = 0;
+
 
 // Functions
 char* login(char* request, user *me);
@@ -62,6 +64,10 @@ void postComment(char *request, user *me);
 void getComments(char *request);
 void banvote(char *request);
 int validateRegEx(char *regex, char *str);
+void expandThreadPool();
+void contractThreadPool();
+
+
 void prepareDBConnection()
 {
   dbConnection = sqlite3_open("rc.db", &db);
@@ -143,7 +149,11 @@ int main(int argc, char *argv[])
   for (;;)
   {
     printf("[server]Asteptam la portul %d...\n", PORT);
-    pause();
+    while(1){
+     if(nrActiveThreads == nthreads){
+       expandThreadPool();
+     }
+    }
   }
 
   sqlite3_close(db);
@@ -190,12 +200,18 @@ void *treat(void *arg)
     {
       perror("[thread]Eroare la accept().\n");
     }
+    nrActiveThreads++;
     pthread_mutex_unlock(&mlock);
     threadsPool[(int)arg].thCount++;
    
     raspunde(client, (int)arg, &me); //procesarea cererii
     /* am terminat cu acest client, inchidem conexiunea */
     close(client);
+    printf("nrA:%d nr:%d", nrActiveThreads, nthreads);
+    if(nrActiveThreads != nthreads && nthreads > 1){
+       contractThreadPool();
+    }
+    nrActiveThreads--;
   }
   sqlite3_close(db);
 }
@@ -1196,4 +1212,39 @@ int validateRegEx(char *exp,char *string)
     regfree(&regex);
       return -1;
   }
+}
+
+
+void expandThreadPool(){
+  printf("nrA:%d nr:%d\n",nrActiveThreads,nthreads);
+  size_t myarray_size = nthreads;
+
+  myarray_size += 1;
+  Thread* newthreadsPool = realloc(threadsPool, myarray_size * sizeof(Thread));
+  if (newthreadsPool) {
+    threadsPool = newthreadsPool;
+  } else {
+  // deal with realloc failing because memory could not be allocated.
+  }
+
+  nthreads++;
+  threadCreate(nthreads);
+  printf("Am creat un nou thread!\n");
+  
+}
+
+void contractThreadPool(){
+
+  size_t myarray_size = nthreads;
+
+  myarray_size -= 1;
+  Thread* newthreadsPool = realloc(threadsPool, myarray_size * sizeof(Thread));
+  if (newthreadsPool) {
+    threadsPool = newthreadsPool;
+  } else {
+    
+  }
+  nthreads--;
+  printf("Am sters un thread!\n");
+  
 }
