@@ -12,7 +12,7 @@
 #include <regex.h> 
 #include <crypt.h>
 #include <unistd.h>
-
+#include <time.h>
 #include <sqlite3.h>
 #include <stdio.h>
 /* portul folosit */
@@ -264,7 +264,7 @@ void handle_request(const int clientSocket, char *request, int idThread, user *m
       strcat(response, "<< /vote <id>\tVote a specific melody\r\n");
       strcat(response, "<< /category <name>\tGet the top for a category\r\n");
       strcat(response, "<< /add <name> <categoryId>\tAdd a melody to the top\r\n");
-      strcat(response, "<< /comment <body> <melodyID>\tComment at a melody\r\n");
+      strcat(response, "<< /comment '<body>'#<melodyId>\tComment at a melody\r\n");
       strcat(response, "<< /showcomments <melodyId>\tComment at a melody\r\n");
     }
     if(me->isAdmin){
@@ -450,7 +450,6 @@ char* login(char* request, user *me) {
   {
     strcpy(password, crypt(pointer,"k7"));
     pointer = strtok(NULL, " ");
-    printf("Passwrod:%s\n",password);
   }
   else
   {
@@ -504,7 +503,7 @@ void getCategories(char *request)
   {
     strcpy(category, pointer);
     pointer = strtok(NULL, " ");
-    printf("Categoria:%s\n",category);
+    printf("Categoria:%s %d\n",category,strlen(category));
   }
   else
   {
@@ -512,14 +511,14 @@ void getCategories(char *request)
   }
 
 
-  char *sqlQuery = "SELECT m.id,m.title,m.nr_voturi FROM melodies m JOIN rmcat r ON r.id_melody=m.id JOIN categories c ON c.id=r.id_category WHERE c.name=? ORDER BY m.nr_voturi DESC";
+  char *sqlQuery = "SELECT m.id,m.title,m.nr_voturi FROM melodies m JOIN rmcat r ON r.id_melody=m.id JOIN categories c ON c.id=r.id_category WHERE c.name=trim('?') ORDER BY m.nr_voturi DESC";
 
   checkForErrors(prepareQuery(sqlQuery),"[category]Could not prepare the SQL Query!\n");
-
+  sqlite3_bind_text(sqlStatment, 1, category, -1, SQLITE_STATIC);
   bzero(response, BUFFERSIZE);
   int i = 0;
   dbConnection = sqlite3_step(sqlStatment);
- 
+  strcat(response, "\n\t Meldiile din categria aleasa \n");
   while (dbConnection == SQLITE_ROW)
   {
       for(int i=0; i<3; i++){
@@ -567,6 +566,7 @@ void getTop()
 
   char *sql = "SELECT id,title,nr_voturi FROM melodies ORDER BY nr_voturi DESC";
   bzero(response, BUFFERSIZE);
+  strcat(response, "\n\t Top 30 melodii \n");
   dbConnection = sqlite3_exec(db, sql, treatRow, 0, &error_message);
 
   if (dbConnection != SQLITE_OK)
@@ -607,24 +607,19 @@ void addMelody(char *request){
   int categoryId;
   char yt_link[255];
   char *pointer;
-  pointer = strtok(request, " ");
-  pointer = strtok(NULL, " ");
-
-  if (pointer != NULL)
-  {
-    strcpy(melody, pointer);
-    pointer = strtok(NULL, " ");
+  
+  int i=5, j=0;
+  while(request[i]!='#'){
+    melody[j++]=request[i++];
   }
-  else
-  {
-    strcat(response,"Invalid format. Ex: /add [title] [yt_link] [categoryID]");
-    return;
-  }
+  printf("%s\n",melody);
+  pointer = strtok(request, "#");
+  pointer = strtok(NULL, "#");
 
   if (pointer != NULL)
   {
     strcpy(yt_link, pointer);
-    pointer = strtok(NULL, " ");
+    pointer = strtok(NULL, "#");
     validateYtLink(yt_link);
   }
   else
@@ -636,7 +631,7 @@ void addMelody(char *request){
   if (pointer != NULL)
   {    
     categoryId = atoi(pointer);
-    pointer = strtok(NULL, " ");
+    pointer = strtok(NULL, "#");
   }
   else
   {
@@ -817,7 +812,7 @@ void postComment(char *request, user *me){
   }
   else
   {
-    strcat(response,"Invalid format. Ex: /comment <body> <melodyId>");
+    strcat(response,"Invalid format. Ex: /comment '<body>'#<melodyId>");
     return;
   }
 
@@ -884,6 +879,7 @@ void getComments(char *request){
   }
   else
   {
+    bzero(response,BUFFERSIZE);
     strcat(response,"Invalid format. Ex: /showcomments <melodyId>");
     return;
   }
@@ -896,6 +892,7 @@ void getComments(char *request){
 
   dbConnection = sqlite3_step(sqlStatment); 
   bzero(response, BUFFERSIZE);
+  strcat(response, "\n\t Comentariile de la melodia dorita \n");
   while (dbConnection == SQLITE_ROW)
   {
     strcat(response,sqlite3_column_text(sqlStatment,0));//username
@@ -908,6 +905,7 @@ void getComments(char *request){
 
   if(strlen(response) == 0)
   {
+    bzero(response,BUFFERSIZE);
     strcat(response,"Nu exista comentarii pentru aceasta melodie\n");
   }
 
