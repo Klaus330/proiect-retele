@@ -56,13 +56,13 @@ char *error_message;
 int prepareQuery(char *sqlQuery);
 int checkIfQueryDone(int code);
 // Functions
-char* login(char* request, user *me);
+char* login(char* request, user *me, int *nrLogins);
 void raspunde(int cl, int idThread, user *me);
 char *registerUser(char *request);
 int checkForErrors(int exception, const char *message);
 void getTop();
 void getCategories(char *request);
-void handle_request(const int clientSocket, char *request, int idThread, user *me);
+void handle_request(const int clientSocket, char *request, int idThread, user *me, int *nrLoginTries);
 void addMelody(char *request);
 void vote(char *request,user *me);
 void postComment(char *request, user *me);
@@ -224,7 +224,7 @@ void *treat(void *arg)
 void raspunde(int cl, int idThread, user *me)
 {
   char request[BUFFERSIZE]; //mesajul primit de trimis la client
-
+  int nrLoginTries=0;
   while (1)
   {
 
@@ -237,20 +237,18 @@ void raspunde(int cl, int idThread, user *me)
     if (!strcmp(request, "/quit"))
     {
       checkForErrors(write(cl, &request, sizeof(request)), "[Thread]Eroare la write() quit catre client.\n");
-
       break;
     }
 
-    handle_request(cl, request, idThread, me);
+    handle_request(cl, request, idThread, me, &nrLoginTries);
     bzero(request, BUFFERSIZE);
   }
   printf("[Thread %d]Am incheiat conexiunea cu clientul.\n", idThread);
 }
 
-void handle_request(const int clientSocket, char *request, int idThread, user *me)
+void handle_request(const int clientSocket, char *request, int idThread, user *me, int * nrLoginTries)
 {
   bzero(response, BUFFERSIZE);
-
   if (strstr(request, "/help"))
   {
     strcat(response, "\t Help Section\r\n");
@@ -263,8 +261,8 @@ void handle_request(const int clientSocket, char *request, int idThread, user *m
       strcat(response, "<< /whoami\tWho am I?\r\n");
       strcat(response, "<< /vote <id>\tVote a specific melody\r\n");
       strcat(response, "<< /category <name>\tGet the top for a category\r\n");
-      strcat(response, "<< /add <name> <categoryId>\tAdd a melody to the top\r\n");
-      strcat(response, "<< /comment '<body>'#<melodyId>\tComment at a melody\r\n");
+      strcat(response, "<< /add <name>#<yt_link>#<categoryId>\tAdd a melody to the top\r\n");
+      strcat(response, "<< /comment <body>#<melodyId>\tComment at a melody\r\n");
       strcat(response, "<< /showcomments <melodyId>\tComment at a melody\r\n");
     }
     if(me->isAdmin){
@@ -284,7 +282,13 @@ void handle_request(const int clientSocket, char *request, int idThread, user *m
   else if (strstr(request, "/login"))
   {
     if(me->username == NULL){
-      strcat(response, login(request, me)); 
+      strcat(response, login(request, me, nrLoginTries));
+      printf("Tries:%d\n",nrLoginTries);
+      if(nrLoginTries>3){
+        bzero(response,BUFFERSIZE);
+        strcat(response,"Prea multe incercari!\n");
+        strcat(response,"/quit");
+      }
     }else{
       strcat(response, "Esti deja logat\n");
     }
@@ -406,7 +410,6 @@ char *registerUser(char *request)
   {
     strcpy(password, crypt(pointer,"k7"));
     pointer = strtok(NULL, " ");
-    printf("Passwrod:%s\n",password); 
   }
   else
   {
@@ -426,7 +429,7 @@ char *registerUser(char *request)
   return "You have been registerd, please log in.";
 }
 
-char* login(char* request, user *me) {
+char* login(char* request, user *me, int *nrLogins) {
   char username[255];
   char password[255];
   char response[BUFFERSIZE];
@@ -443,6 +446,8 @@ char* login(char* request, user *me) {
   }
   else
   {
+    nrLogins++;
+    printf("Tries:%d\n",nrLogins);
     return "Trebuie sa introduci un unsername\n ex: /login [username] [passowrd]";
   }
 
@@ -453,6 +458,8 @@ char* login(char* request, user *me) {
   }
   else
   {
+    nrLogins++;
+    printf("Tries:%d\n",nrLogins);
     return "Trebuie sa introduci o parola\n ex: /login [username] [passowrd]";
   }
 
@@ -476,7 +483,8 @@ char* login(char* request, user *me) {
     // sqlite3_close(db);
 
     bzero(response, BUFFERSIZE);
-   
+    nrLogins++;
+    printf("Tries:%d\n",nrLogins);
     return "Input invalid. Please check again your credentials.";
   }
 
