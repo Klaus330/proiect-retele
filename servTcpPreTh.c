@@ -256,8 +256,8 @@ void handle_request(const int clientSocket, char *request, int idThread, user *m
     strcat(response, "\t Help Section\r\n");
     strcat(response, "<< /quit\tQuit app\r\n");
     strcat(response, "<< /login <username> <password>\tLog in the app\r\n");
-    strcat(response, "<< /register\tRegister an account\r\n");
-    strcat(response, "<< /help <username> <password>\tShow help\r\n");
+    strcat(response, "<< /register <username> <password>\tRegister an account\r\n");
+    strcat(response, "<< /help\tShow help\r\n");
     if(me->username != NULL){
       strcat(response, "<< /top <id>\tShow the general Top 30 meldies\r\n");
       strcat(response, "<< /whoami\tWho am I?\r\n");
@@ -284,9 +284,10 @@ void handle_request(const int clientSocket, char *request, int idThread, user *m
   else if (strstr(request, "/login"))
   {
     if(me->username == NULL){
-       printf("nrTries:%d\n",me->loginTries);
       strcat(response, login(request, me));
-      printf("nrTries:%d\n",me->loginTries);
+      char incercari[200];
+      sprintf(incercari, "\n\e[1;33mNumar de incercari ramase:%d\e[0m", 3-me->loginTries);
+      strcat(response,incercari);
       if(me->loginTries>=3){
         bzero(response,BUFFERSIZE);
         strcat(response,"\e[1;31mPrea multe incercari\e[0m!\n");
@@ -993,7 +994,6 @@ int validateRegEx(char *exp,char *string)
 
 
 void expandThreadPool(){
-  printf("nrA:%d nr:%d\n",nrActiveThreads,nthreads);
   size_t myarray_size = nthreads;
 
   myarray_size += 1;
@@ -1022,8 +1022,6 @@ void contractThreadPool(){
     
   }
   nthreads--;
-  printf("Am sters un thread!\n");
-  
 }
 
 int prepareQuery(char *sqlQuery){

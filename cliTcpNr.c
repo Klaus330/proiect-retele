@@ -57,7 +57,7 @@ int main (int argc, char *argv[])
       perror ("[client]Eroare la connect().\n");
       return errno;
     }
-
+  printf("\tBun venit pe TOP MUSIC!\n Pentru a vedea comenzile disponibile tasteaza /help\n");
   while(1){
     /* citirea mesajului */
     printf (">>");
