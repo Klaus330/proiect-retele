@@ -262,13 +262,8 @@ void handle_request(const int clientSocket, char *request, int idThread, user *m
       strcat(response, "<< /whoami\tWho am I?\r\n");
       strcat(response, "<< /vote <id>\tVote a specific melody\r\n");
       strcat(response, "<< /category <name>\tGet the top for a category\r\n");
-<<<<<<< HEAD
       strcat(response, "<< /add <name>#<yt_link>#<categoryId>\tAdd a melody to the top\r\n");
       strcat(response, "<< /comment <body>#<melodyId>\tComment at a melody\r\n");
-=======
-      strcat(response, "<< /add <name> <categoryId>\tAdd a melody to the top\r\n");
-      strcat(response, "<< /comment '<body>'#<melodyId>\tComment at a melody\r\n");
->>>>>>> abfa6eddb4c7bf0e0d00b2e2e0d098b52f0d62cb
       strcat(response, "<< /showcomments <melodyId>\tComment at a melody\r\n");
     }
     if(me->isAdmin){
@@ -779,13 +774,8 @@ void deleteMelody(char *request){
   
   strcat(response,"Melodia a fost stearsa\n");
 }
-<<<<<<< HEAD
 
 
-=======
-
-
->>>>>>> abfa6eddb4c7bf0e0d00b2e2e0d098b52f0d62cb
 int getLastCommentID(){
   int commentID=0;
   char *sql = "SELECT id FROM comments ORDER BY id DESC LIMIT 1";
@@ -1052,7 +1042,4 @@ int checkIfQueryDone(int code){
     return -1;
   }
 }
-<<<<<<< HEAD
 
-=======
->>>>>>> abfa6eddb4c7bf0e0d00b2e2e0d098b52f0d62cb
