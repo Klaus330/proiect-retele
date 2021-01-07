@@ -19,6 +19,7 @@
 #define PORT 2909
 #define BUFFERSIZE 4096
 #define SERVER_ERROR -1
+#define PRIMARY_KEY_ERROR 19
 /* codul de eroare returnat de anumite apeluri */
 extern int errno;
 
@@ -713,13 +714,16 @@ void vote(char *request, user *me){
   }
 
   // Check to see if there is a melody with the provided id
-  char *sqlQuery = "SELECT COUNT(*) FROM melodies WHERE id=?";
+  char *sqlQuery = "SELECT id FROM melodies WHERE id=?";
 
   checkForErrors(prepareQuery(sqlQuery),"[vote]Could not prepare the SQL Query!\n");
   sqlite3_bind_int(sqlStatment, 1, melodyId);
   
   dbConnection = sqlite3_step(sqlStatment); 
-  checkForErrors(checkIfQueryDone(dbConnection), "[vote]Error at finishing the query!\n");
+  if(dbConnection == SQLITE_DONE){
+    strcat(response,"Nu am gasit o melodie cu acest id!");
+    return;
+  }
 
   // Add the vote relationship to the votes table
   char *sql = "INSERT INTO votes VALUES(?,?)";
@@ -730,7 +734,12 @@ void vote(char *request, user *me){
   sqlite3_bind_int(sqlStatment, 2, me->userID);
   
   dbConnection = sqlite3_step(sqlStatment); 
-  checkForErrors(checkIfQueryDone(dbConnection), "[vote]Error at finishing the query!\n");
+  
+  if(dbConnection == PRIMARY_KEY_ERROR){
+    strcat(response,"NU poti vota o melodie de doua ori!");
+    return;
+  }
+  checkForErrors(checkIfQueryDone(dbConnection), "[vote]Error at finishing the query2!\n");
 
   // Add the new vote to the melody
   char *sqlQ = "UPDATE melodies SET nr_voturi=nr_voturi+1 WHERE id=?";
@@ -740,7 +749,7 @@ void vote(char *request, user *me){
   sqlite3_bind_int(sqlStatment, 1, melodyId);
 
   dbConnection = sqlite3_step(sqlStatment); 
-  checkForErrors(checkIfQueryDone(dbConnection), "[vote]Error at finishing the query!\n");
+  checkForErrors(checkIfQueryDone(dbConnection), "[vote]Error at finishing the query3!\n");
 
   strcat(response,"Votul tau a fost inregistrat");
 }
