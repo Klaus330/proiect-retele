@@ -267,8 +267,8 @@ void handle_request(const int clientSocket, char *request, int idThread, user *m
       strcat(response, "<< /showcomments <melodyId>\tComment at a melody\r\n");
     }
     if(me->isAdmin){
-      strcat(response, "<< /remove\t Remove a melody\r\n");
-      strcat(response, "<< /banvote\t Ban a user from voting\r\n");
+      strcat(response, "<< /remove <melodyId>\t Remove a melody\r\n");
+      strcat(response, "<< /banvote <username>\t Ban a user from voting\r\n");
     }
   }
   else if (strstr(request, "/register"))
