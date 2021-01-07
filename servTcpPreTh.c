@@ -519,16 +519,23 @@ void getCategories(char *request)
   }
 
 
-  char *sqlQuery = "SELECT m.id,m.title,m.nr_voturi FROM melodies m JOIN rmcat r ON r.id_melody=m.id JOIN categories c ON c.id=r.id_category WHERE c.name=trim('?') ORDER BY m.nr_voturi DESC";
+  char *sql = "SELECT id FROM categories WHERE name=?";
+  checkForErrors(prepareQuery(sql),"[category]Could not prepare the SQL Query!\n");
+  sqlite3_bind_text(sqlStatment, 1, category, -1, SQLITE_STATIC);
+  dbConnection = sqlite3_step(sqlStatment);
+  int categoryId = sqlite3_column_int(sqlStatment,0);
+   
+  char *sqlQuery = "SELECT m.id,m.title,m.nr_voturi FROM melodies m JOIN rmcat r ON r.id_melody=m.id JOIN categories c ON c.id=r.id_category WHERE c.id=? ORDER BY m.nr_voturi DESC";
 
   checkForErrors(prepareQuery(sqlQuery),"[category]Could not prepare the SQL Query!\n");
-  sqlite3_bind_text(sqlStatment, 1, category, -1, SQLITE_STATIC);
+  sqlite3_bind_int(sqlStatment, 1, categoryId);
   bzero(response, BUFFERSIZE);
   int i = 0;
   dbConnection = sqlite3_step(sqlStatment);
   strcat(response, "\n\t Meldiile din categria aleasa \n");
   while (dbConnection == SQLITE_ROW)
   {
+    
       for(int i=0; i<3; i++){
         printf("%s", sqlite3_column_text(sqlStatment, i));
         strcat(response, sqlite3_column_text(sqlStatment, i));
@@ -539,16 +546,12 @@ void getCategories(char *request)
      dbConnection = sqlite3_step(sqlStatment);
   }
 
-  printf("[server]: Rapunsul este:%s \n", response);
-
   if (strlen(response) == 0)
   {
     strcat(response, "Nu exista melodii pentru aceasta categorie");
     sqlite3_finalize(sqlStatment);
     return;
   }
-
-  checkForErrors(checkIfQueryDone(dbConnection), "[category]Error at finishing the query!\n");
 }
 
 
@@ -574,7 +577,7 @@ void getTop()
 
   char *sql = "SELECT id,title,nr_voturi FROM melodies ORDER BY nr_voturi DESC";
   bzero(response, BUFFERSIZE);
-  strcat(response, "\n\t Top 30 melodii \n");
+  strcat(response, "\n\t Top 30 melodii \n \t (ID TITLE VOTE_NR)\n");
   dbConnection = sqlite3_exec(db, sql, treatRow, 0, &error_message);
 
   if (dbConnection != SQLITE_OK)
@@ -667,7 +670,6 @@ void addMelody(char *request){
   {
     melodyId = sqlite3_column_int(sqlStatment,0);
     printf("melodyID:%d\n",melodyId);
-    printf("AM trecut si pe aici\n");
   }else
   {
     fprintf(stderr, "Failed to select data\n");
