@@ -85,8 +85,9 @@ int main (int argc, char *argv[])
       return errno;
     }
     if(strlen(request) == 0) break;
-    if(strcmp(request,"/quit") == 0)
+    if(strstr(request,"/quit"))
     { 
+      printf ("%s\n", request);      
       printf ("[client] Am incheiat conexiunea cu serverul.\n");  
       break;
     }
@@ -97,3 +98,4 @@ int main (int argc, char *argv[])
   /* inchidem conexiunea, am terminat */
   close (sd);
 }
+
