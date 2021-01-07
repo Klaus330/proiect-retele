@@ -286,9 +286,9 @@ void handle_request(const int clientSocket, char *request, int idThread, user *m
        printf("nrTries:%d\n",me->loginTries);
       strcat(response, login(request, me));
       printf("nrTries:%d\n",me->loginTries);
-      if(me->loginTries>3){
+      if(me->loginTries>=3){
         bzero(response,BUFFERSIZE);
-        strcat(response,"Prea multe incercari!\n");
+        strcat(response,"\e[1;31mPrea multe incercari\e[0m!\n");
         strcat(response,"/quit");
       }
     }else{
