@@ -215,7 +215,7 @@ void *treat(void *arg)
     raspunde(client, (int)arg, &me); //procesarea cererii
     /* am terminat cu acest client, inchidem conexiunea */
     close(client);
-    printf("nrA:%d nr:%d", nrActiveThreads, nthreads);
+    
     if(nrActiveThreads != nthreads && nthreads > 1){
        contractThreadPool();
     }
@@ -565,7 +565,22 @@ int treatRow(void *NotUsed, int argc, char **argv,
   for (int i = 0; i < argc; i++)
   {
     strcat(response, argv[i]);
+    if(i==0){
+      strcat(response, ".");  
+    }
+  
     strcat(response, " ");
+    if(i==1){
+      strcat(response, "-> ");
+    }
+
+    if(i==argc-1){
+      if(strcmp(argv[i],"1")==0){
+        strcat(response, "vot");
+      }else{
+        strcat(response, "voturi");
+      }
+    }
   }
   strcat(response, "\n");
   printf("\n");
