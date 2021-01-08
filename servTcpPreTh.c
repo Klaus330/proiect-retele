@@ -540,7 +540,21 @@ void getCategories(char *request)
       for(int i=0; i<3; i++){
         printf("%s", sqlite3_column_text(sqlStatment, i));
         strcat(response, sqlite3_column_text(sqlStatment, i));
+        if(i==0){
+          strcat(response, ".");  
+        }
         strcat(response, " ");
+        if(i==1){
+          strcat(response, "-> ");
+        }
+
+        if(i==2){
+          if(strcmp(sqlite3_column_text(sqlStatment, i),"1")==0){
+            strcat(response, "vot");
+          }else{
+            strcat(response, "voturi");
+          }
+        }
       }
       printf("\n");
       strcat(response, "\n");
