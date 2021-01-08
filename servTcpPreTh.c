@@ -526,7 +526,7 @@ void getCategories(char *request)
   dbConnection = sqlite3_step(sqlStatment);
   int categoryId = sqlite3_column_int(sqlStatment,0);
    
-  char *sqlQuery = "SELECT m.id,m.title,m.nr_voturi FROM melodies m JOIN rmcat r ON r.id_melody=m.id JOIN categories c ON c.id=r.id_category WHERE c.id=? ORDER BY m.nr_voturi DESC";
+  char *sqlQuery = "SELECT m.id,m.title,m.nr_voturi, m.yt_link FROM melodies m JOIN rmcat r ON r.id_melody=m.id JOIN categories c ON c.id=r.id_category WHERE c.id=? ORDER BY m.nr_voturi DESC";
 
   checkForErrors(prepareQuery(sqlQuery),"[category]Could not prepare the SQL Query!\n");
   sqlite3_bind_int(sqlStatment, 1, categoryId);
@@ -537,7 +537,7 @@ void getCategories(char *request)
   while (dbConnection == SQLITE_ROW)
   {
     
-      for(int i=0; i<3; i++){
+      for(int i=0; i<4; i++){
         printf("%s", sqlite3_column_text(sqlStatment, i));
         strcat(response, sqlite3_column_text(sqlStatment, i));
         if(i==0){
@@ -550,9 +550,9 @@ void getCategories(char *request)
 
         if(i==2){
           if(strcmp(sqlite3_column_text(sqlStatment, i),"1")==0){
-            strcat(response, "vot");
+            strcat(response, "vot -> ");
           }else{
-            strcat(response, "voturi");
+            strcat(response, "voturi -> ");
           }
         }
       }
@@ -588,11 +588,11 @@ int treatRow(void *NotUsed, int argc, char **argv,
       strcat(response, "-> ");
     }
 
-    if(i==argc-1){
+    if(i==2){
       if(strcmp(argv[i],"1")==0){
-        strcat(response, "vot");
+        strcat(response, "vot -> ");
       }else{
-        strcat(response, "voturi");
+        strcat(response, "voturi -> ");
       }
     }
   }
@@ -605,7 +605,7 @@ int treatRow(void *NotUsed, int argc, char **argv,
 void getTop()
 {
 
-  char *sql = "SELECT id,title,nr_voturi FROM melodies ORDER BY nr_voturi DESC";
+  char *sql = "SELECT id,title,nr_voturi, yt_link FROM melodies ORDER BY nr_voturi DESC";
   bzero(response, BUFFERSIZE);
   strcat(response, "\n\t Top 30 melodii \n \t (ID TITLE VOTE_NR)\n");
   dbConnection = sqlite3_exec(db, sql, treatRow, 0, &error_message);
