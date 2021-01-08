@@ -260,7 +260,7 @@ void handle_request(const int clientSocket, char *request, int idThread, user *m
     strcat(response, "<< /register <username> <password>\tRegister an account\r\n");
     strcat(response, "<< /help\tShow help\r\n");
     if(me->username != NULL){
-      strcat(response, "<< /showcategories <id>\tShow all the categries\r\n");
+      strcat(response, "<< /showcategories \tShow all the categries\r\n");
       strcat(response, "<< /top <id>\tShow the general Top 30 meldies\r\n");
       strcat(response, "<< /whoami\tWho am I?\r\n");
       strcat(response, "<< /vote <id>\tVote a specific melody\r\n");
@@ -438,7 +438,10 @@ char *registerUser(char *request)
   sqlite3_bind_text(sqlStatment, 2, password, -1, SQLITE_STATIC);
   sqlite3_bind_int(sqlStatment, 3, 0);
 
-  dbConnection = sqlite3_step(sqlStatment); 
+  dbConnection = sqlite3_step(sqlStatment);  
+  if(dbConnection==PRIMARY_KEY_ERROR){
+    return "There is already a user with that username.";
+  }
   checkForErrors(checkIfQueryDone(dbConnection), "[login]Error at finishing the query!\n");
   return "You have been registerd, please log in.";
 }
