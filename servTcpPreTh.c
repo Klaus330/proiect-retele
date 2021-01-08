@@ -63,7 +63,7 @@ void raspunde(int cl, int idThread, user *me);
 char *registerUser(char *request);
 int checkForErrors(int exception, const char *message);
 void getTop();
-void getCategories(char *request);
+void getCategoriesMelodies(char *request);
 void handle_request(const int clientSocket, char *request, int idThread, user *me);
 void addMelody(char *request);
 void vote(char *request,user *me);
@@ -73,11 +73,12 @@ void banvote(char *request);
 int validateRegEx(char *regex, char *str);
 void expandThreadPool();
 void contractThreadPool();
+void getCategories(char *request);
 
 
 void prepareDBConnection()
 {
-  dbConnection = sqlite3_open("rc.db", &db);
+  dbConnection = sqlite3_open("retele.db", &db);
 
   if (dbConnection != SQLITE_OK)
   {
@@ -259,6 +260,7 @@ void handle_request(const int clientSocket, char *request, int idThread, user *m
     strcat(response, "<< /register <username> <password>\tRegister an account\r\n");
     strcat(response, "<< /help\tShow help\r\n");
     if(me->username != NULL){
+      strcat(response, "<< /showcategories <id>\tShow all the categries\r\n");
       strcat(response, "<< /top <id>\tShow the general Top 30 meldies\r\n");
       strcat(response, "<< /whoami\tWho am I?\r\n");
       strcat(response, "<< /vote <id>\tVote a specific melody\r\n");
@@ -310,6 +312,14 @@ void handle_request(const int clientSocket, char *request, int idThread, user *m
     }
   }
   else if (strstr(request, "/category"))
+  {
+    if(me->username != NULL){
+      getCategoriesMelodies(request);
+    }else{
+      strcat(response,"Nu sunteti inregistrat\n");
+    }
+  }
+   else if (strstr(request, "/showcategories"))
   {
     if(me->username != NULL){
       getCategories(request);
@@ -498,8 +508,40 @@ char* login(char* request, user *me) {
   return "You are logged in.";
 }
 
+void getCategories(char* request){
+ 
+ char * sql = "SELECT id, name FROM categories";
+ checkForErrors(prepareQuery(sql),"[category]Could not prepare the SQL Query!\n");
+ dbConnection = sqlite3_step(sqlStatment);
+ bzero(response, BUFFERSIZE);
+ int i=0;
 
-void getCategories(char *request)
+ strcat(response, "\n\t Categoriile accesibile \n");
+
+ while (dbConnection == SQLITE_ROW)
+ {
+    for(int i=0; i<2; i++){
+       printf("%s", sqlite3_column_text(sqlStatment, i));
+       strcat(response, sqlite3_column_text(sqlStatment, i));
+       if(i==0){
+          strcat(response, ".");  
+       }
+        strcat(response, " ");
+       
+    }
+    strcat(response, "\n");
+    dbConnection = sqlite3_step(sqlStatment);
+ }
+
+  if (strcmp(response,"\n\t Categoriile accesibile \n") == 0)
+  {
+    strcat(response, "Nu exista inca nicio categorie");
+    sqlite3_finalize(sqlStatment);
+    return;
+  }
+}
+
+void getCategoriesMelodies(char *request)
 {
 
   char *category[255];
@@ -561,7 +603,7 @@ void getCategories(char *request)
      dbConnection = sqlite3_step(sqlStatment);
   }
 
-  if (strlen(response) == 0)
+  if (strcmp(response,"\n\t Meldiile din categria aleasa \n") == 0)
   {
     strcat(response, "Nu exista melodii pentru aceasta categorie");
     sqlite3_finalize(sqlStatment);
