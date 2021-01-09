@@ -261,11 +261,11 @@ void handle_request(const int clientSocket, char *request, int idThread, user *m
     strcat(response, "<< /help\tShow help\r\n");
     if(me->username != NULL){
       strcat(response, "<< /showcategories \tShow all the categries\r\n");
-      strcat(response, "<< /top <id>\tShow the general Top 30 meldies\r\n");
+      strcat(response, "<< /top \tShow the general Top 30 meldies\r\n");
       strcat(response, "<< /whoami\tWho am I?\r\n");
       strcat(response, "<< /vote <id>\tVote a specific melody\r\n");
       strcat(response, "<< /category <name>\tGet the top for a category\r\n");
-      strcat(response, "<< /add <name>#<yt_link>#<categoryId>\tAdd a melody to the top\r\n");
+      strcat(response, "<< /add <name>#<yt_link>#<categoryId>#[description]\tAdd a melody to the top\r\n");
       strcat(response, "<< /comment <body>#<melodyId>\tComment at a melody\r\n");
       strcat(response, "<< /showcomments <melodyId>\tComment at a melody\r\n");
     }
@@ -623,7 +623,13 @@ int treatRow(void *NotUsed, int argc, char **argv,
   char *aux;
   for (int i = 0; i < argc; i++)
   {
-    strcat(response, argv[i]);
+    if(argv[i]!=NULL){
+      strcat(response, argv[i]);
+     if(i==3){
+      strcat(response, "\n");
+     }
+    }
+   
     if(i==0){
       strcat(response, ".");  
     }
@@ -640,6 +646,7 @@ int treatRow(void *NotUsed, int argc, char **argv,
         strcat(response, "voturi -> ");
       }
     }
+   
   }
   strcat(response, "\n");
   printf("\n");
@@ -650,7 +657,7 @@ int treatRow(void *NotUsed, int argc, char **argv,
 void getTop()
 {
 
-  char *sql = "SELECT id,title,nr_voturi, yt_link FROM melodies ORDER BY nr_voturi DESC";
+  char *sql = "SELECT id,title,nr_voturi, yt_link,description FROM melodies ORDER BY nr_voturi DESC";
   bzero(response, BUFFERSIZE);
   strcat(response, "\n\t Top 30 melodii \n \t (ID TITLE VOTE_NR)\n");
   dbConnection = sqlite3_exec(db, sql, treatRow, 0, &error_message);
@@ -693,12 +700,16 @@ void addMelody(char *request){
   char melody[255];
   int categoryId;
   char yt_link[255];
+  char description[400];
   char *pointer;
   
   int i=5, j=0;
   while(request[i]!='#'){
-    melody[j++]=request[i++];
+    melody[j]=request[i];
+    j++;
+    i++;
   }
+  melody[j]='\0';
   printf("%s\n",melody);
   pointer = strtok(request, "#");
   pointer = strtok(NULL, "#");
@@ -726,12 +737,26 @@ void addMelody(char *request){
     return;
   }
 
-  char *sqlQuery = "INSERT INTO melodies(title,yt_link) VALUES(trim(?),?)";
+
+  if (pointer != NULL)
+  {    
+    strcpy(description,pointer);
+    pointer = strtok(NULL, "#");
+  }else{
+    strcpy(description,"No description");
+  }
+
+  if(strlen(description)==0){
+    strcpy(description," ");
+  }
+
+  char *sqlQuery = "INSERT INTO melodies(title,yt_link,description) VALUES(trim(?),?,?)";
 
   checkForErrors(prepareQuery(sqlQuery),"[add]Could not prepare the SQL Query!\n");
 
   sqlite3_bind_text(sqlStatment, 1, melody, -1, SQLITE_STATIC);
   sqlite3_bind_text(sqlStatment, 2, yt_link, -1, SQLITE_STATIC);
+  sqlite3_bind_text(sqlStatment, 3, description, -1, SQLITE_STATIC);
 
   dbConnection = sqlite3_step(sqlStatment); 
   if(dbConnection==PRIMARY_KEY_ERROR){
