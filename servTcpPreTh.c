@@ -669,21 +669,22 @@ void getTop()
   }
 }
 
-void validateYtLink(char *link){
+int validateYtLink(char *link){
    switch(validateRegEx("(http:|https:)?\\/\\/(www\\.)?(youtube.com|youtu.be)\\/(watch)?(\\?v=)?(\\\S+)?", link)){
       case 1:
+      return 1;
       break;
       case 0:
         strcat(response,"Linkul nu este valid");
-        return;
+        return 0;
       break;
       case -1:
         strcat(response,"Internal Server Error");
-        return;
+        return -1;
       break;  
       case -2:
         strcat(response,"Could not compile");
-        return;
+        return -2;
       break;      
     }
 }
@@ -706,7 +707,7 @@ void addMelody(char *request){
   {
     strcpy(yt_link, pointer);
     pointer = strtok(NULL, "#");
-    validateYtLink(yt_link);
+    if(validateYtLink(yt_link)!=1) return;
   }
   else
   {
@@ -725,7 +726,7 @@ void addMelody(char *request){
     return;
   }
 
-  char *sqlQuery = "INSERT INTO melodies(title,yt_link) VALUES(?,?)";
+  char *sqlQuery = "INSERT INTO melodies(title,yt_link) VALUES(trim(?),?)";
 
   checkForErrors(prepareQuery(sqlQuery),"[add]Could not prepare the SQL Query!\n");
 
@@ -733,6 +734,10 @@ void addMelody(char *request){
   sqlite3_bind_text(sqlStatment, 2, yt_link, -1, SQLITE_STATIC);
 
   dbConnection = sqlite3_step(sqlStatment); 
+  if(dbConnection==PRIMARY_KEY_ERROR){
+    strcat(response,"You can't add a melody twice!");
+    return;
+  }
   checkForErrors(checkIfQueryDone(dbConnection), "[add]Error at finishing the query!\n");
 
   int melodyId=0;
@@ -1061,7 +1066,7 @@ int validateRegEx(char *exp,char *string)
   else {
       regerror(reti, &regex, error_message, sizeof(error_message));
       fprintf(stderr, "Regex match failed: %s\n", error_message);
-    regfree(&regex);
+      regfree(&regex);
       return -1;
   }
 }
